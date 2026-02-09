@@ -1,0 +1,37 @@
+﻿extensions: designer.cs generated.cs
+extensions: .cs .cpp .h
+// Copyright (c) 2026 William Brocklesby. All rights reserved.
+// 
+// This source code is the proprietary property of William Brocklesby.
+// Use, distribution, or modification of this file is strictly prohibited 
+// without express written permission.
+//
+// Internal Use Only.
+extensions: .aspx .ascx
+<%-- 
+Copyright (c) 2026 William Brocklesby. All rights reserved.
+
+This source code is the proprietary property of William Brocklesby.
+Use, distribution, or modification of this file is strictly prohibited
+without express written permission.
+
+Internal Use Only.
+--%>
+extensions: .vb
+' Copyright (c) 2026 William Brocklesby. All rights reserved.
+'
+' This source code is the proprietary property of William Brocklesby.
+' Use, distribution, or modification of this file is strictly prohibited
+' without express written permission.
+'
+' Internal Use Only.
+extensions:  .xml .config .xsd
+<!--
+Copyright (c) 2026 William Brocklesby. All rights reserved.
+
+This source code is the proprietary property of William Brocklesby.
+Use, distribution, or modification of this file is strictly prohibited
+without express written permission.
+
+Internal Use Only.
+-->

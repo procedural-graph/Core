@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="Core/Core.csproj" />
+    <Project Path="Generic/Generic.csproj" Id="e5c845b2-c7df-43e7-a38a-469bfa78b8e7" />
+  </Folder>
+  <Folder Name="/tests/" />
+</Solution>

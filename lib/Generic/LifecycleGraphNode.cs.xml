@@ -1,0 +1,55 @@
+﻿<!--
+Copyright (c) 2026 William Brocklesby. All rights reserved.
+
+This source code is the proprietary property of William Brocklesby.
+Use, distribution, or modification of this file is strictly prohibited
+without express written permission.
+
+Internal Use Only.
+-->
+<doc>
+  <members name="LifecycleGraphNode">
+    <TrySetStateFlag>
+      <summary>
+        Attempts to set the specified state flag on the entity and returns a value indicating whether the flag was newly
+        set.
+      </summary>
+      <remarks>This method uses atomic operations to ensure that the state flag is set safely in multithreaded scenarios.</remarks>
+      <param name="value">
+        The state flag to set on the entity. This value should be a valid <see cref="EntityState"/> enumeration member.
+      </param>
+      <param name="resultantState">When this method returns, contains the new state of the entity after the flag has been set.</param>
+      <returns>
+        <see langword="true"/> if the specified flag was not previously set and is now set; otherwise, <see langword="false"/>.
+      </returns>
+    </TrySetStateFlag>
+    <TryClearStateFlag>
+      <summary>
+        Attempts to clear the specified state flag on the entity and returns a value indicating whether the flag was newly
+        cleared.
+      </summary>
+      <remarks>This method uses atomic operations to ensure that the state flag is cleared safely in multithreaded scenarios.</remarks>
+      <param name="value">
+        The state flag to clear on the entity. This value should be a valid <see cref="EntityState"/> enumeration member.
+      </param>
+      <param name="resultantState">When this method returns, contains the new state of the entity after the flag has been cleared.</param>
+      <returns>
+        <see langword="true"/> if the specified flag was previously set and is now cleared; otherwise, <see langword="false"/>.
+      </returns>
+    </TryClearStateFlag>
+    <SetStateFlag>
+      <summary>
+        Sets the specified state flag on the current entity state.
+      </summary>
+      <param name="value">The state flag to set.</param>
+      <returns>The previous state of the entity before setting the flag.</returns>
+    </SetStateFlag>
+    <ClearStateFlag>
+      <summary>
+        Clears the specified state flag from the current entity state.
+      </summary>
+      <param name="value">The state flag to clear.</param>
+      <returns>The previous state of the entity before clearing the flag.</returns>
+    </ClearStateFlag>
+  </members>
+</doc>

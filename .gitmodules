@@ -1,0 +1,3 @@
+[submodule "Procedural Graph Core"]
+	path = flax
+	url = https://github.com/will11600/Procedural-Graph-Core.git

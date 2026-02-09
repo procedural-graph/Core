@@ -1,0 +1,6 @@
+{
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "*.cs": "$(capture).*.cs, $(capture).cs.xml"
+  }
+}
