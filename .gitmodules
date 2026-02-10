@@ -1,3 +1,6 @@
-[submodule "Procedural Graph Core"]
+[submodule "Procedural Graph Flax"]
 	path = flax
 	url = https://github.com/will11600/Procedural-Graph-Core.git
+[submodule "Procedural Graph Unity"]
+	path = unity
+	url = https://github.com/will11600/Procedural-Graph-Unity.git
