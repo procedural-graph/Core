@@ -1,0 +1,9 @@
+﻿<doc>
+  <members name="ConcurrentCollection">
+    <Complete>
+      <summary>
+        Marks the event stream as complete, preventing any further events from being written.
+      </summary>
+    </Complete>
+  </members>
+</doc>

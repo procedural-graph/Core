@@ -8,12 +8,13 @@
 using System.Runtime.CompilerServices;
 using System.Threading;
 
-namespace ProceduralGraph.Generic;
+namespace ProceduralGraph.Collections;
 
-internal abstract partial class ConcurrentCollection<T>
+public abstract partial class ConcurrentCollection<TItem, TEnumerator>
 {
 	private bool _complete;
 
+    /// <include file='ConcurrentCollection.cs.xml' path='doc/members[@name="ConcurrentCollection"]/Complete/*'/>
     public void Complete()
 	{
 		if (Interlocked.Exchange(ref _complete, true))
@@ -25,5 +26,5 @@ internal abstract partial class ConcurrentCollection<T>
 	}
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ItemEventArgs<T> CreateEventArgs(T item, ItemChangeType changeType) => new(item, changeType);
+    private static ItemEventArgs<TItem> CreateEventArgs(TItem item, ItemChangeType changeType) => new(item, changeType);
 }

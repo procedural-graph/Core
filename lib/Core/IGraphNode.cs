@@ -5,6 +5,7 @@
 // without express written permission.
 //
 // Internal Use Only.
+using System;
 using System.Collections.Generic;
 
 namespace ProceduralGraph
@@ -22,6 +23,6 @@ namespace ProceduralGraph
         /// <summary>
         /// Gets the collection of descendant graphs in the hierarchy.
         /// </summary>
-        IReadOnlyCollection<IGraphNode> Descendants { get; }
+        ICollection<IGraphNode> Descendants { get; }
     }
 }

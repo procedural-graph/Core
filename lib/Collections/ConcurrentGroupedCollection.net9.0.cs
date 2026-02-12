@@ -9,14 +9,24 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
 
-namespace ProceduralGraph.Generic;
+namespace ProceduralGraph.Collections;
 
-internal partial class ConcurrentGroupedCollection<TKey, TItem> : IReadOnlyDictionary<TKey, IReadOnlySet<TItem>>
+public partial class ConcurrentGroupedCollection<TKey, TItem> : IReadOnlyDictionary<TKey, IReadOnlySet<TItem>>
 {
+    /// <inheritdoc/>
     public IReadOnlySet<TItem> this[TKey key] => _items[key];
 
     IEnumerable<IReadOnlySet<TItem>> IReadOnlyDictionary<TKey, IReadOnlySet<TItem>>.Values => _items.Values;
 
+    /// <summary>
+    /// Removes the items associated with the specified key from the collection.
+    /// </summary>
+    /// <param name="key">The key whose associated items are to be removed from the collection.</param>
+    /// <param name="items">
+    /// hen this method returns, contains a read-only set of items that were removed if the key was found; otherwise,
+    /// an empty set.
+    /// </param>
+    /// <returns><see langword="true"/> if the key was found and its items were removed; otherwise, <see langword="false"/>.</returns>
     public bool Remove(TKey key, out IReadOnlySet<TItem> items)
     {
         if (_items.TryRemove(key, out ImmutableHashSet<TItem>? value))
@@ -37,6 +47,7 @@ internal partial class ConcurrentGroupedCollection<TKey, TItem> : IReadOnlyDicti
         return false;
     }
 
+    /// <inheritdoc/>
     public bool TryGetValue(TKey key, out IReadOnlySet<TItem> value)
     {
         if (_items.TryGetValue(key, out ImmutableHashSet<TItem>? result))

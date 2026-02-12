@@ -5,12 +5,9 @@
 // without express written permission.
 //
 // Internal Use Only.
-namespace ProceduralGraph.Generic
+namespace ProceduralGraph.Collections
 {
-#if NET5_0_OR_GREATER
-    internal readonly record struct ItemEventArgs<T>(T Item, ItemChangeType ChangeType);
-#else
-    internal readonly struct ItemEventArgs<T>
+    public readonly struct ItemEventArgs<T>
     {
         public T Item { get; }
 
@@ -22,5 +19,4 @@ namespace ProceduralGraph.Generic
             ChangeType = changeType;
         }
     }
-#endif
 }

@@ -6,6 +6,8 @@
 //
 // Internal Use Only.
 using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace ProceduralGraph.Generic
 {
@@ -21,6 +23,8 @@ namespace ProceduralGraph.Generic
         where TKey : struct, IEquatable<TKey>
         where TValue : class
     {
+        private static readonly ReadOnlyCollection<IGraphNode> _emptyDescendants;
+
         /// <summary>
         /// Gets the <see cref="GraphEntity{TKey, TValue}"/> associated with this component.
         /// </summary>
@@ -31,5 +35,12 @@ namespace ProceduralGraph.Generic
         /// Occurs when the state of the component has changed.
         /// </summary>
         public abstract event Action? StateChanged;
+
+        static GraphComponent()
+        {
+            _emptyDescendants = new ReadOnlyCollection<IGraphNode>(Array.Empty<IGraphNode>());
+        }
+
+        ICollection<IGraphNode> IGraphNode.Descendants => _emptyDescendants;
     }
 }

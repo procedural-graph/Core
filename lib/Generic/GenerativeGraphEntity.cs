@@ -5,6 +5,7 @@
 // without express written permission.
 //
 // Internal Use Only.
+using ProceduralGraph.Collections;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -24,23 +25,66 @@ namespace ProceduralGraph.Generic
         where TKey : struct, IEquatable<TKey>
         where TValue : class
     {
-        /// <summary>
-        /// Represents a read-only collection of all immediate descendant nodes of a generative graph entity, including
-        /// both child entities and components.
-        /// </summary>
-        public sealed class DescendantCollection : IReadOnlyCollection<IGraphNode>
+        internal sealed class DescendantCollection : ICollection<IGraphNode>
         {
             private readonly GenerativeGraphEntity<TKey, TValue> _owner;
 
-            /// <inheritdoc/>
-            public int Count => _owner.childEntities!.Count + _owner._components!.Count;
+            public int Count => _owner.Children.Count + _owner.Components.Count;
+
+            bool ICollection<IGraphNode>.IsReadOnly => false;
+
+            public void Add(IGraphNode item)
+            {
+                switch (item)
+                {
+                    case GraphComponent<TKey, TValue> component: _owner.Components.Add(component); break;
+                    case GraphEntity<TKey, TValue> entity: _owner.Children.Add(entity); break;
+                    default: throw new ArgumentException($"Item must be of type {typeof(GraphComponent<TKey, TValue>).FullName} or {typeof(GraphEntity<TKey, TValue>).FullName}.", nameof(item));
+                }
+            }
+
+            public bool Contains(IGraphNode item) => item switch
+            {
+                GraphComponent<TKey, TValue> component => _owner.Components.Contains(component),
+                GraphEntity<TKey, TValue> entity => _owner.Children.Contains(entity),
+                _ => false
+            };
+
+            public void CopyTo(IGraphNode[] array, int arrayIndex)
+            {
+#if NET7_0_OR_GREATER
+                ArgumentNullException.ThrowIfNull(array, nameof(array));
+                ArgumentOutOfRangeException.ThrowIfNegative(arrayIndex, nameof(arrayIndex));
+                ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(arrayIndex, array.Length, nameof(arrayIndex));
+#else
+                if (array is null)
+                {
+                    throw new ArgumentNullException(nameof(array));
+                }
+                if (arrayIndex < 0 || arrayIndex >= array.Length)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+                }
+#endif
+
+                ICollection<IGraphNode> components = ((ICollection<IGraphNode>)_owner.Components);
+                components.CopyTo(array, arrayIndex);
+                arrayIndex += components.Count;
+                ((ICollection<IGraphNode>)_owner.Children).CopyTo(array, arrayIndex);
+            }
+
+            public bool Remove(IGraphNode item) => item switch
+            {
+                GraphComponent<TKey, TValue> component => _owner.Components.Remove(component),
+                GraphEntity<TKey, TValue> entity => _owner.Children.Remove(entity),
+                _ => false
+            };
 
             internal DescendantCollection(GenerativeGraphEntity<TKey, TValue> owner)
             {
                 _owner = owner;
             }
 
-            /// <inheritdoc/>
             public IEnumerator<IGraphNode> GetEnumerator()
             {
                 using (ImmutableList<GraphComponent<TKey, TValue>>.Enumerator componentsEnumerator = _owner._components!.GetEnumerator())
@@ -51,7 +95,7 @@ namespace ProceduralGraph.Generic
                     }
                 }
 
-                using ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator childrenEnumerator = _owner.childEntities!.GetEnumerator();
+                using ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator childrenEnumerator = _owner.Children.GetEnumerator();
                 while (childrenEnumerator.MoveNext())
                 {
                     yield return childrenEnumerator.Current;
@@ -62,6 +106,11 @@ namespace ProceduralGraph.Generic
             {
                 return GetEnumerator();
             }
+
+            void ICollection<IGraphNode>.Clear()
+            {
+                throw new NotSupportedException("Clearing the collection of descendants is not supported. Remove individual components and child entities instead.");
+            }
         }
 
         /// <summary>
@@ -70,7 +119,7 @@ namespace ProceduralGraph.Generic
         protected virtual TimeSpan DebouncePeriod => TimeSpan.FromSeconds(0.2);
 
         private readonly DescendantCollection _descendants;
-        IReadOnlyCollection<IGraphNode> IGraphNode.Descendants => _descendants;
+        ICollection<IGraphNode> IGraphNode.Descendants => _descendants;
 
         private ConcurrentList<GraphComponent<TKey, TValue>>? _components;
         /// <summary>

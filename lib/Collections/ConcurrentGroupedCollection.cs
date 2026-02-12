@@ -13,10 +13,22 @@ using System.Collections.Immutable;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace ProceduralGraph.Generic
+namespace ProceduralGraph.Collections
 {
-    internal partial class ConcurrentGroupedCollection<TKey, TItem> : ConcurrentCollection<TItem>, ICollection<TItem> where TKey : notnull
+    /// <summary>
+    /// Represents a thread-safe collection that groups items by a specified key and supports concurrent operations for
+    /// adding, removing, and enumerating items.
+    /// </summary>
+    /// <typeparam name="TKey">The type of the key used to group items. Must be non-nullable.</typeparam>
+    /// <typeparam name="TItem">The type of items stored in the collection.</typeparam>
+    public partial class ConcurrentGroupedCollection<TKey, TItem> : 
+        ConcurrentCollection<TItem, ConcurrentGroupedCollection<TKey, TItem>.Enumerator>, 
+        ICollection<TItem> 
+        where TKey : notnull
     {
+        /// <summary>
+        /// Enumerates the elements contained within a collection of immutable hash sets.
+        /// </summary>
         public struct Enumerator : IEnumerator<TItem>
         {
             private readonly IEnumerator<ImmutableHashSet<TItem>> _setEnumerator;
@@ -30,9 +42,11 @@ namespace ProceduralGraph.Generic
                 _initialized = false;
             }
 
+            /// <inheritdoc/>
             public readonly TItem Current => _itemEnumerator.Current;
             readonly object IEnumerator.Current => Current!;
 
+            /// <inheritdoc/>
             public bool MoveNext()
             {
                 if (_initialized && _itemEnumerator.MoveNext())
@@ -54,6 +68,7 @@ namespace ProceduralGraph.Generic
                 return false;
             }
 
+            /// <inheritdoc/>
             public void Reset()
             {
                 _setEnumerator.Reset();
@@ -61,6 +76,7 @@ namespace ProceduralGraph.Generic
                 _initialized = false;
             }
 
+            /// <inheritdoc/>
             public void Dispose()
             {
                 _setEnumerator.Dispose();
@@ -72,12 +88,19 @@ namespace ProceduralGraph.Generic
         private readonly ConcurrentDictionary<TKey, ImmutableHashSet<TItem>> _items;
 
         private int _count;
-        public int Count => _count;
+        /// <inheritdoc/>
+        public override int Count => _count;
 
+        /// <inheritdoc/>
         public IEnumerable<TKey> Keys => _items.Keys;
 
         bool ICollection<TItem>.IsReadOnly => false;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ConcurrentGroupedCollection{TKey, TItem}"/> class using the specified key selector
+        /// function.
+        /// </summary>
+        /// <param name="keySelector">A function that extracts the grouping key from each item. Cannot be <see langword="null"/>.</param>
         public ConcurrentGroupedCollection(Func<TItem, TKey> keySelector)
         {
 #if NET7_0_OR_GREATER
@@ -93,6 +116,11 @@ namespace ProceduralGraph.Generic
             _keySelector = keySelector;
         }
 
+        /// <summary>
+        /// Attempts to add the specified item to the collection.
+        /// </summary>
+        /// <param name="item">The item to add to the collection. Cannot be <see langword="null"/>.</param>
+        /// <returns><see langword="true"/> if the item was successfully added; otherwise, <see langword="false"/>.</returns>
         public bool Add(TItem item)
         {
 #if NET7_0_OR_GREATER
@@ -113,6 +141,15 @@ namespace ProceduralGraph.Generic
             return false;
         }
 
+        /// <summary>
+        /// Asynchronously attempts to add the specified item to the collection.
+        /// </summary>
+        /// <param name="item">The item to add to the collection. Cannot be <see langword="null"/>.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used to cancel the add operation.</param>
+        /// <returns>
+        /// A value task that represents the asynchronous operation. The result is <see langword="true"/> if the item
+        /// was added; otherwise, <see langword="false"/>.
+        /// </returns>
         public async ValueTask<bool> AddAsync(TItem item, CancellationToken cancellationToken = default)
         {
 #if NET7_0_OR_GREATER
@@ -134,11 +171,13 @@ namespace ProceduralGraph.Generic
             return false;
         }
 
-        public Enumerator GetEnumerator()
+        /// <inheritdoc/>
+        public override Enumerator GetEnumerator()
         {
             return new Enumerator(_items.Values.GetEnumerator());
         }
 
+        /// <inheritdoc/>
         public bool Remove(TItem item)
         {
 #if NET7_0_OR_GREATER
@@ -159,6 +198,16 @@ namespace ProceduralGraph.Generic
             return false;
         }
 
+        /// <summary>
+        /// Removes all items associated with the specified key from the collection asynchronously.
+        /// </summary>
+        /// <param name="key">The key whose associated items are to be removed from the collection.</param>
+        /// <param name="items">
+        /// When this method returns, contains a read-only collection of items that were removed, or an empty collection
+        /// if the key was not found.
+        /// </param>
+        /// <param name="cancellationToken">A cancellation token that can be used to cancel the operation.</param>
+        /// <returns><see langword="true"/> if items were successfully removed for the specified key; otherwise, <see langword="false"/>.</returns>
         public bool RemoveAsync(TKey key, out IReadOnlyCollection<TItem> items, CancellationToken cancellationToken = default)
         {
             if (_items.TryRemove(key, out ImmutableHashSet<TItem>? value))
@@ -182,6 +231,15 @@ namespace ProceduralGraph.Generic
             return false;
         }
 
+        /// <summary>
+        /// Asynchronously removes the specified item from the collection.
+        /// </summary>
+        /// <param name="item">The item to remove from the collection. Cannot be null.</param>
+        /// <param name="cancellationToken">A cancellation token that can be used to cancel the remove operation.</param>
+        /// <returns>
+        /// A <see cref="ValueTask"/> that represents the asynchronous operation. 
+        /// The result is <see langword="true"/> if the item was successfully removed; otherwise, <see langword="false"/>.
+        /// </returns>
         public async ValueTask<bool> RemoveAsync(TItem item, CancellationToken cancellationToken = default)
         {
 #if NET7_0_OR_GREATER
@@ -203,12 +261,14 @@ namespace ProceduralGraph.Generic
             return false;
         }
 
+        /// <inheritdoc/>
         public bool ContainsKey(TKey key)
         {
             return _items.ContainsKey(key);
         }
 
-        public bool Contains(TItem item)
+        /// <inheritdoc/>
+        public override bool Contains(TItem item)
         {
 #if NET7_0_OR_GREATER
             ArgumentNullException.ThrowIfNull(item, nameof(item));
@@ -229,7 +289,8 @@ namespace ProceduralGraph.Generic
             return false;
         }
 
-        public void CopyTo(TItem[] array, int arrayIndex)
+        /// <inheritdoc/>
+        public override void CopyTo(TItem[] array, int arrayIndex)
         {
 #if NET7_0_OR_GREATER
             ArgumentNullException.ThrowIfNull(array, nameof(array));
@@ -249,7 +310,7 @@ namespace ProceduralGraph.Generic
 
         private bool TryAdd(TItem item)
         {
-            CheckCompleted();
+            ThrowIfCompleted();
 
             TKey key = _keySelector(item);
 
@@ -289,7 +350,7 @@ namespace ProceduralGraph.Generic
 
         private bool TryRemove(TItem item)
         {
-            CheckCompleted();
+            ThrowIfCompleted();
 
             TKey key = _keySelector(item);
 
@@ -324,16 +385,6 @@ namespace ProceduralGraph.Generic
         {
             var kvp = new KeyValuePair<TKey, ImmutableHashSet<TItem>>(key, expectedValue);
             return ((ICollection<KeyValuePair<TKey, ImmutableHashSet<TItem>>>)_items).Remove(kvp);
-        }
-
-        IEnumerator<TItem> IEnumerable<TItem>.GetEnumerator()
-        {
-            return GetEnumerator();
-        }
-
-        IEnumerator IEnumerable.GetEnumerator()
-        {
-            return GetEnumerator();
         }
 
         void ICollection<TItem>.Add(TItem item)

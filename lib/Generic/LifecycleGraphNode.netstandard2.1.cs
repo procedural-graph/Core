@@ -20,7 +20,7 @@ namespace ProceduralGraph.Generic
 
         private TaskCompletionSource<object?> _lifetimeTcs = new TaskCompletionSource<object?>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        IReadOnlyCollection<IGraphNode> IGraphNode.Descendants => ImmutableArray<IGraphNode>.Empty;
+        ICollection<IGraphNode> IGraphNode.Descendants => ImmutableArray<IGraphNode>.Empty;
 
         /// <inheritdoc/>
         public void Start(CancellationToken stoppingToken = default)

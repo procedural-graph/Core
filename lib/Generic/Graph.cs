@@ -40,7 +40,7 @@ namespace ProceduralGraph.Generic
         protected abstract ISceneMemberInfoProvider<TKey, TValue> SceneMemberInfoProvider { get; }
 
         private ConcurrentDictionary<TValue, GraphEntity<TKey, TValue>>? _roots;
-        IReadOnlyCollection<IGraphNode> IGraphNode.Descendants => (IReadOnlyCollection<IGraphNode>)_roots!.Values;
+        ICollection<IGraphNode> IGraphNode.Descendants => (ICollection<IGraphNode>)_roots!.Values;
 
         /// <inheritdoc/>
         public ICollection<TValue> Keys => _roots!.Keys;
@@ -160,7 +160,7 @@ namespace ProceduralGraph.Generic
 
                 if (converter.ToGraph(sceneMember, this, current) is GraphEntity<TKey, TValue> entity)
                 {
-                    current.childEntities!.Add(entity);
+                    current.Children.Add(entity);
                     entity.Start(StoppingToken);
                     return entity;
                 }
@@ -195,9 +195,9 @@ namespace ProceduralGraph.Generic
 
             TKey sceneMemberID = SceneMemberInfoProvider.GetKey(item);
 #if NET5_0_OR_GREATER
-            if (parentEntity.childEntities is { } children && children.Remove(sceneMemberID, out IReadOnlySet<GraphEntity<TKey, TValue>>? items))
+            if (parentEntity.Children.Remove(sceneMemberID, out IReadOnlySet<GraphEntity<TKey, TValue>>? items))
 #else
-            if (parentEntity.childEntities is { } children && children.Remove(sceneMemberID, out IReadOnlyCollection<GraphEntity<TKey, TValue>>? items))
+            if (parentEntity.Children.Remove(sceneMemberID, out IReadOnlyCollection<GraphEntity<TKey, TValue>>? items))
 #endif
             {
                 using ImmutableHashSet<GraphEntity<TKey, TValue>>.Enumerator enumerator = ((ImmutableHashSet<GraphEntity<TKey, TValue>>)items).GetEnumerator();

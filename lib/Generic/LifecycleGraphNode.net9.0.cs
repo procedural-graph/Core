@@ -19,7 +19,7 @@ public abstract partial class LifecycleGraphNode<TKey, TValue>
 
     private TaskCompletionSource _lifetimeTcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    IReadOnlyCollection<IGraphNode> IGraphNode.Descendants => [];
+    ICollection<IGraphNode> IGraphNode.Descendants => [];
 
     /// <inheritdoc/>
     public void Start(CancellationToken stoppingToken = default)

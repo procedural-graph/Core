@@ -5,6 +5,7 @@
 // without express written permission.
 //
 // Internal Use Only.
+using ProceduralGraph.Collections;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -36,14 +37,14 @@ namespace ProceduralGraph.Generic
         /// </summary>
         protected abstract Graph<TKey, TValue> Graph { get; }
 
-        /// <summary>
-        /// Gets the parent entity of the current graph entity, or <see langword="null"/> if the entity has no parent.
-        /// </summary>
+        /// <inheritdoc cref="IGraphNode.Parent"/>
         public abstract GraphEntity<TKey, TValue>? Parent { get; }
         IGraphNode? IGraphNode.Parent => Parent;
 
-        internal ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>? childEntities;
-        IReadOnlyCollection<IGraphNode> IGraphNode.Descendants => (IReadOnlyCollection<IGraphNode>)childEntities!;
+        private ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>? _children;
+        /// <inheritdoc cref="IGraphNode.Descendants"/>
+        public ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> Children => _children!;
+        ICollection<IGraphNode> IGraphNode.Descendants => (ICollection<IGraphNode>)_children!;
 
         private Task _childEventHandling = Task.CompletedTask;
 
@@ -68,8 +69,8 @@ namespace ProceduralGraph.Generic
             CancellationToken parentStoppingToken = Parent?.StoppingToken ?? CancellationToken.None;
             CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, parentStoppingToken);
 
-            childEntities = new ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>(SceneMemberIdentity);
-            _childEventHandling = HandleCollectionEventsAsync(childEntities, OnChildAdded, OnChildRemoved, Logger, cts.Token);
+            _children = new ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>(SceneMemberIdentity);
+            _childEventHandling = HandleCollectionEventsAsync(_children, OnChildAdded, OnChildRemoved, Logger, cts.Token);
 
             return cts;
         }
@@ -158,19 +159,20 @@ namespace ProceduralGraph.Generic
             return $"{GetType().Name} ({ID})";
         }
 
-        internal static async Task HandleCollectionEventsAsync<T>(
-            ConcurrentCollection<T> collection,
-            Action<T> onAdded,
-            Action<T> onRemoved,
+        internal static async Task HandleCollectionEventsAsync<TItem, TEnumerator>(
+            ConcurrentCollection<TItem, TEnumerator> collection,
+            Action<TItem> onAdded,
+            Action<TItem> onRemoved,
             ILogger logger,
             CancellationToken cancellationToken)
+            where TEnumerator : IEnumerator<TItem>
         {
-            ChannelReader<ItemEventArgs<T>> reader = collection.Events;
-            await foreach (ItemEventArgs<T> args in reader.ReadAllAsync(cancellationToken))
+            ChannelReader<ItemEventArgs<TItem>> reader = collection.Events;
+            await foreach (ItemEventArgs<TItem> args in reader.ReadAllAsync(cancellationToken))
             {
                 try
                 {
-                    Action<T> callback = args.ChangeType switch
+                    Action<TItem> callback = args.ChangeType switch
                     {
                         ItemChangeType.Added => onAdded,
                         ItemChangeType.Removed => onRemoved,
@@ -193,7 +195,7 @@ namespace ProceduralGraph.Generic
 
         internal static void EnqueueChildren(GraphEntity<TKey, TValue> entity, Queue<GraphEntity<TKey, TValue>> queue)
         {
-            ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>? children = entity.childEntities;
+            ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>? children = entity._children;
             if (children?.Count is int childCount && childCount > 0)
             {
 #if NET8_0_OR_GREATER
@@ -212,12 +214,12 @@ namespace ProceduralGraph.Generic
         {
             base.OnDisposing();
 
-            if (childEntities is null)
+            if (_children is null)
             {
                 return;
             }
 
-            using ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator enumerator = childEntities.GetEnumerator();
+            using ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator enumerator = _children.GetEnumerator();
             while (enumerator.MoveNext())
             {
                 GraphEntity<TKey, TValue> current = enumerator.Current;

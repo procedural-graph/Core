@@ -5,7 +5,7 @@
 // without express written permission.
 //
 // Internal Use Only.
-namespace ProceduralGraph.Generic
+namespace ProceduralGraph.Collections
 {
     /// <summary>
     /// Specifies the type of change that has occurred to an item.

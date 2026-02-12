@@ -5,6 +5,7 @@
 // without express written permission.
 //
 // Internal Use Only.
+using ProceduralGraph.Collections;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
