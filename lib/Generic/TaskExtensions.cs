@@ -5,6 +5,7 @@
 // without express written permission.
 //
 // Internal Use Only.
+using Microsoft.Extensions.ObjectPool;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,6 +14,21 @@ namespace ProceduralGraph.Generic
 {
     internal static partial class TaskExtensions
     {
+        private static readonly ObjectPool<CallbackState> _callbackStatePool = new DefaultObjectPool<CallbackState>(new DefaultPooledObjectPolicy<CallbackState>());
+
+        private sealed class CallbackState : IResettable
+        {
+            public ILogger? logger;
+            public object? context;
+
+            public bool TryReset()
+            {
+                logger = null;
+                context = null;
+                return true;
+            }
+        }
+
         private static readonly Action<Task, object?> LogOnFaultDelegate = OnTaskFaulted;
 
         public static async Task CancelAsync(this CancellationTokenSource cts, CancellationToken cancellationToken)
@@ -36,7 +52,10 @@ namespace ProceduralGraph.Generic
                 return;
             }
 
-            var state = new CallbackState(logger, context);
+            CallbackState state = _callbackStatePool.Get();
+            state.logger = logger;
+            state.context = context;
+
             task.ContinueWith(LogOnFaultDelegate, state, cancellationToken, ContinuationOptions, TaskScheduler.Default);
         }
 
@@ -62,12 +81,19 @@ namespace ProceduralGraph.Generic
             task.Forget(logger, context, cancellationToken);
         }
 
-        private static void OnTaskFaulted(Task task, object? state)
+        private static void OnTaskFaulted(Task task, object? context)
         {
-            (ILogger logger, object? context) = (CallbackState)state!;
-            if (task.Exception is { })
+            CallbackState state = (CallbackState)context!;
+            try
             {
-                logger.LogException(task.Exception, context);
+                if (task.Exception is { })
+                {
+                    state.logger!.LogException(task.Exception, state.context);
+                }
+            }
+            finally
+            {
+                _callbackStatePool.Return(state);
             }
         }
     }

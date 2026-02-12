@@ -15,7 +15,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Collections\Collections.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="9.0.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
@@ -26,8 +28,6 @@
   <ItemGroup Condition="'$(TargetFramework)' == 'netstandard2.1'">
     <Compile Remove="**\*.net9.0.cs" />
     <None Include="**\*.net9.0.cs" />
-    <PackageReference Include="System.Threading.Channels" Version="10.0.2" />
-    <PackageReference Include="System.Collections.Immutable" Version="10.0.2" />
   </ItemGroup>
 
 </Project>

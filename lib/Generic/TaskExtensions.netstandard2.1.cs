@@ -17,45 +17,6 @@ namespace ProceduralGraph.Generic
 {
     internal static partial class TaskExtensions
     {
-        private sealed class CallbackState : IEquatable<CallbackState>
-        {
-            public ILogger Logger { get; }
-
-            public object? Context { get; }
-
-            public CallbackState(ILogger logger, object? context)
-            {
-                Logger = logger;
-                Context = context;
-            }
-
-            public void Deconstruct(out ILogger logger, out object? context)
-            {
-                logger = Logger;
-                context = Context;
-            }
-
-            public bool Equals(CallbackState? other)
-            {
-                return other is { } && Logger.Equals(other.Logger) && Equals(Context, other.Context);
-            }
-
-            public override bool Equals(object? obj)
-            {
-                return obj is CallbackState other && Equals(other);
-            }
-
-            override public int GetHashCode()
-            {
-                return HashCode.Combine(Logger, Context);
-            }
-
-            public override string ToString()
-            {
-                return $"CallbackHandler {{ Logger = {Logger}, Context = {Context} }}";
-            }
-        }
-
         private static readonly UnboundedChannelOptions _channelOptions = new UnboundedChannelOptions
         {
             SingleWriter = false,
