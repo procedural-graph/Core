@@ -11,6 +11,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -145,12 +146,12 @@ namespace ProceduralGraph.Generic
         {
             CancellationToken stoppingToken = rootEntity.StoppingToken;
             TValue parentSceneMember = SceneMemberInfoProvider.GetParent(sceneMember)!;
-            using var bfsEnumerator = new BreadthFirstSearchEnumerator<GraphEntity<TKey, TValue>>(rootEntity, GraphEntity<TKey, TValue>.EnqueueChildren);
-            while (bfsEnumerator.MoveNext())
+            using var enumerator = new BreadthFirstGraphTraverser<TKey, TValue>(rootEntity);
+            while (enumerator.MoveNext())
             {
                 stoppingToken.ThrowIfCancellationRequested();
 
-                GraphEntity<TKey, TValue> current = bfsEnumerator.Current;
+                GraphEntity<TKey, TValue> current = enumerator.Current;
                 TKey currentSceneMemberID = GraphEntity<TKey, TValue>.SceneMemberIdentity(current);
 
                 if (!SceneMemberInfoProvider.Equals(currentSceneMemberID, parentSceneMember))
@@ -214,6 +215,37 @@ namespace ProceduralGraph.Generic
         {
             ValueTask stopAndDispose = StopAndDisposeAsync(entity, CancellationToken.None);
             stopAndDispose.Forget(Logger, entity, CancellationToken.None);
+        }
+
+        private bool TryFindParent(TValue sceneMember, GraphEntity<TKey, TValue> rootEntity, [NotNullWhen(true)] out GraphEntity<TKey, TValue>? parentEntity)
+        {
+            TValue? parent = SceneMemberInfoProvider.GetParent(sceneMember);
+            TKey parentKey = parent is { } ? SceneMemberInfoProvider.GetKey(parent) : default;
+
+            using var enumerator = new BreadthFirstGraphTraverser<TKey, TValue>(rootEntity);
+            while (enumerator.MoveNext())
+            {
+                GraphEntity<TKey, TValue> current = enumerator.Current;
+
+                if (current is IProxyGraphNode<TValue> proxyNode)
+                {
+                    TValue? currentParent = SceneMemberInfoProvider.GetParent(proxyNode.SceneMember);
+                    if (SceneMemberInfoProvider.Equals(currentParent, parent))
+                    {
+                        parentEntity = current;
+                        return true;
+                    }
+                }
+
+                if (current.Children.TryGetValue(parentKey, out var results))
+                {
+                    parentEntity = results.FirstOrDefault();
+                    return parentEntity is { };
+                }
+            }
+
+            parentEntity = null;
+            return false;
         }
 
         private static async ValueTask StopAndDisposeAsync(GraphEntity<TKey, TValue> entity, CancellationToken cancellationToken)

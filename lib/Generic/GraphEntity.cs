@@ -193,22 +193,6 @@ namespace ProceduralGraph.Generic
             return entity.SceneMemberIdentity();
         }
 
-        internal static void EnqueueChildren(GraphEntity<TKey, TValue> entity, Queue<GraphEntity<TKey, TValue>> queue)
-        {
-            ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>? children = entity._children;
-            if (children?.Count is int childCount && childCount > 0)
-            {
-#if NET8_0_OR_GREATER
-                queue.EnsureCapacity(queue.Count + childCount);
-#endif
-                using var enumerator = children.GetEnumerator();
-                while (enumerator.MoveNext())
-                {
-                    queue.Enqueue(enumerator.Current);
-                }
-            }
-        }
-
         /// <inheritdoc/>
         protected override void OnDisposing()
         {
