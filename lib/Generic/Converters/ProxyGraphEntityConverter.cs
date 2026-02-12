@@ -6,7 +6,6 @@
 //
 // Internal Use Only.
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 
@@ -16,7 +15,10 @@ namespace ProceduralGraph.Generic.Converters
     /// Represents a base implementation of an entity converter that provides mechanisms for converting between scene members 
     /// and graph entity representations within a graph structure.
     /// </summary>
-    /// <typeparam name="TEntity">The type of graph entity being converted. Must derive from <see cref="LifecycleGraphNode{TKey, TValue}"/>.</typeparam>
+    /// <typeparam name="TEntity">
+    /// The type of graph entity being converted. Must derive from 
+    /// <see cref="LifecycleGraphNode{TKey, TValue}"/> and implement <see cref="IProxyGraphNode{TValue}"/>.
+    /// </typeparam>
     /// <typeparam name="TSceneMember">
     /// The engine-specific type of scene hierarchy member being converted. 
     /// Must derive from <typeparamref name="TValue"/>.
@@ -27,7 +29,8 @@ namespace ProceduralGraph.Generic.Converters
     /// </typeparam>
     /// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
     public abstract class ProxyGraphEntityConverter<TEntity, TSceneMember, TKey, TValue> : GraphConverter, IGraphConverter 
-        where TEntity : ProxyGraphEntity<TKey, TValue>
+        where TEntity : LifecycleGraphNode<TKey, TValue>, IProxyGraphNode<TValue>
+        where TSceneMember : class, TValue
         where TKey : struct, IEquatable<TKey>
         where TValue : class
     {
@@ -47,7 +50,7 @@ namespace ProceduralGraph.Generic.Converters
         /// <summary>
         /// Converts the specified <typeparamref name="TSceneMember"/> to it's corresponding <typeparamref name="TEntity"/> representation.
         /// </summary>
-        /// <param name="node">
+        /// <param name="sceneMember">
         /// The <typeparamref name="TSceneMember"/> to convert to an <typeparamref name="TEntity"/>. 
         /// Cannot be <see langword="null"/>.
         /// </param>
@@ -60,6 +63,6 @@ namespace ProceduralGraph.Generic.Converters
         /// or <see langword="null"/> if the entity has no parent.
         /// </param>
         /// <returns>The entity representation of the specified scene member.</returns>
-        protected abstract TEntity ToEntity(TSceneMember node, IAsyncLifecycle host, IGraphNode? parent = null);
+        protected abstract TEntity ToEntity(TSceneMember sceneMember, IAsyncLifecycle host, IGraphNode? parent = null);
     }
 }
