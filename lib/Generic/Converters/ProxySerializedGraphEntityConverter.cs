@@ -6,7 +6,6 @@
 //
 // Internal Use Only.
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 
@@ -30,37 +29,30 @@ namespace ProceduralGraph.Generic.Converters
     /// <see cref="IEquatable{TKey}"/>.
     /// </typeparam>
     /// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-    public abstract class ProxySerializedGraphEntityConverter<TEntity, TModel, TSceneMember, TKey, TValue> : 
-        SerializedGraphEntityConverter<TEntity, TModel, TKey, TValue>, IGraphConverter
+    public abstract class ProxySerializedGraphEntityConverter<TEntity, TModel, TSceneMember, TKey, TValue> : GraphNodeSerializer<TEntity, TModel>, IGraphConverter
         where TEntity : LifecycleGraphNode<TKey, TValue>, IProxyGraphNode<TValue>
         where TSceneMember : class, TValue
         where TKey : struct, IEquatable<TKey>
         where TValue : class
-        where TModel : notnull
+        where TModel : class
     {
+        private const string ProxySceneMemberRequiredMessageFormat = 
+            "Proxy entities must be associated with a scene member to be converted to a graph node. " +
+            "Use {0} with the model parameter instead.";
+
 #if NET8_0_OR_GREATER
         private static readonly ImmutableArray<Type> _supportedTypes = [typeof(TSceneMember), typeof(TEntity), typeof(TModel)];
 #else
         private static readonly ImmutableArray<Type> _supportedTypes = ImmutableArray.Create(typeof(TSceneMember), typeof(TEntity), typeof(TModel));
 #endif
-        /// <inheritdoc cref="IGraphConverter.SupportedTypes"/>
+        /// <inheritdoc/>
         public override ImmutableArray<Type> SupportedTypes => _supportedTypes;
-        IReadOnlyCollection<Type> IGraphConverter.SupportedTypes => _supportedTypes;
 
         /// <inheritdoc/>
         public override bool CanConvert([NotNullWhen(true)] object? obj)
         {
             return base.CanConvert(obj) || obj is TSceneMember;
         }
-
-        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent) => obj switch
-        {
-            TModel model => ToEntity(model, host, parent),
-            TSceneMember sceneMember => ToEntity(sceneMember, host, parent),
-            _ => throw new InvalidOperationException($"Unsupported type: {obj.GetType()}")
-        };
-
-        object IGraphConverter.ToModel(IGraphNode node, IAsyncLifecycle host) => ToModel((TEntity)node, host);
 
         /// <summary>
         /// Converts the specified <typeparamref name="TSceneMember"/> to it's corresponding <typeparamref name="TEntity"/> representation.
@@ -73,11 +65,33 @@ namespace ProceduralGraph.Generic.Converters
         /// The asynchronous lifecycle host that manages the entity's lifecycle. 
         /// Cannot be <see langword="null"/>.
         /// </param>
+        /// <param name="model">The model representation to use for the conversion, or <see langword="null"/> if no model is available.</param>
         /// <param name="parent">
         /// The parent graph node to associate with the new entity, 
         /// or <see langword="null"/> if the entity has no parent.
         /// </param>
         /// <returns>The entity representation of the specified scene member.</returns>
-        protected abstract TEntity ToEntity(TSceneMember sceneMember, IAsyncLifecycle host, IGraphNode? parent = null);
+        protected abstract TEntity ToEntity(TSceneMember sceneMember, IAsyncLifecycle host, TModel? model, IGraphNode? parent = null);
+
+        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent)
+        {
+            try
+            {
+                TSceneMember typedSceneMember = obj as TSceneMember ?? throw new ArgumentException($"Must be of type {typeof(TSceneMember)}.", nameof(obj));
+                return ToEntity(typedSceneMember, host, null, parent);
+            }
+            catch (ArgumentException ex) when (obj is TModel)
+            {
+                string message = string.Format(ProxySceneMemberRequiredMessageFormat, nameof(IGraphConverter.ToGraph));
+                throw new NotSupportedException(ProxySceneMemberRequiredMessageFormat, ex);
+            }
+        }
+
+        IGraphNode IGraphConverter.ToGraph(object sceneMember, IAsyncLifecycle host, object model, IGraphNode? parent)
+        {
+            TSceneMember typedSceneMember = sceneMember as TSceneMember ?? throw new ArgumentException($"Must be of type {typeof(TSceneMember)}", nameof(sceneMember));
+            TModel typedModel = model as TModel ?? throw new ArgumentException($"Must be of type {typeof(TModel)}", nameof(model));
+            return ToEntity(typedSceneMember, host, typedModel, parent);
+        }
     }
 }

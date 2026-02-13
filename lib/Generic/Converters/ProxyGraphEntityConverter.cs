@@ -28,7 +28,7 @@ namespace ProceduralGraph.Generic.Converters
     /// <see cref="IEquatable{TKey}"/>.
     /// </typeparam>
     /// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-    public abstract class ProxyGraphEntityConverter<TEntity, TSceneMember, TKey, TValue> : GraphConverter, IGraphConverter 
+    public abstract class ProxyGraphEntityConverter<TEntity, TSceneMember, TKey, TValue> : GraphConverter<TEntity>, IGraphConverter
         where TEntity : LifecycleGraphNode<TKey, TValue>, IProxyGraphNode<TValue>
         where TSceneMember : class, TValue
         where TKey : struct, IEquatable<TKey>
@@ -44,8 +44,6 @@ namespace ProceduralGraph.Generic.Converters
 
         /// <inheritdoc/>
         public override bool CanConvert([NotNullWhen(true)] object? obj) => obj is TEntity;
-
-        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent) => ToEntity((TSceneMember)obj, host, parent);
 
         /// <summary>
         /// Converts the specified <typeparamref name="TSceneMember"/> to it's corresponding <typeparamref name="TEntity"/> representation.
@@ -64,5 +62,7 @@ namespace ProceduralGraph.Generic.Converters
         /// </param>
         /// <returns>The entity representation of the specified scene member.</returns>
         protected abstract TEntity ToEntity(TSceneMember sceneMember, IAsyncLifecycle host, IGraphNode? parent = null);
+
+        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent) => ToEntity((TSceneMember)obj, host, parent);
     }
 }

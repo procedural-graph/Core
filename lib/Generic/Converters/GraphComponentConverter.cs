@@ -23,9 +23,9 @@ namespace ProceduralGraph.Generic.Converters
     /// <see cref="IEquatable{TKey}"/>.
     /// </typeparam>
     /// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-    public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TValue, TKey> : GraphConverter, IGraphConverter
+    public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TValue, TKey> : GraphNodeSerializer<TComponent, TModel>, IGraphConverter
         where TComponent : GraphComponent<TKey, TValue>
-        where TModel : notnull
+        where TModel : class
         where TEntity : LifecycleGraphNode<TKey, TValue>
         where TKey : struct, IEquatable<TKey>
         where TValue : class
@@ -37,22 +37,6 @@ namespace ProceduralGraph.Generic.Converters
 #endif
         /// <inheritdoc/>
         public override ImmutableArray<Type> SupportedTypes => _supportedTypes;
-
-        /// <inheritdoc/>
-        public override bool CanConvert([NotNullWhen(true)] object? obj)
-        {
-            return obj is TComponent || obj is TModel;
-        }
-
-        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent)
-        {
-            if (parent is TEntity entity)
-            {
-                return ToComponent((TModel)obj, host, entity);
-            }
-
-            throw new InvalidOperationException($"The parent node must be of type {typeof(TEntity).FullName} to convert an object of type {typeof(TModel).FullName} to a {typeof(TComponent).FullName}.");
-        }
 
         /// <summary>
         /// Converts the specified <typeparamref name="TModel"/> to it's corresponding <typeparamref name="TComponent"/> representation.
@@ -71,28 +55,24 @@ namespace ProceduralGraph.Generic.Converters
         /// <returns>The entity representation of the specified model.</returns>
         protected abstract IGraphNode ToComponent(TModel model, IAsyncLifecycle host, TEntity entity);
 
-        object IGraphConverter.ToModel(IGraphNode node, IAsyncLifecycle host)
+        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent)
         {
-            if (node is TComponent component)
+#if NET7_0_OR_GREATER
+            ArgumentNullException.ThrowIfNull(parent, nameof(parent));
+#else
+            if (parent is null)
             {
-                return ToModel(component, host);
+                throw new ArgumentNullException(nameof(parent));
             }
-
-            throw new InvalidOperationException($"The node must be of type {typeof(TComponent).FullName} to convert it to a model of type {typeof(TModel).FullName}.");
+#endif
+            TEntity typedEntity = parent as TEntity ?? throw new ArgumentException($"Must be of type {typeof(TEntity)}.", nameof(parent));
+            TModel typedModel = obj as TModel ?? throw new ArgumentException($"Must be of type {typeof(TModel)}.", nameof(obj));
+            return ToComponent(typedModel, host, typedEntity);
         }
 
-        /// <summary>
-        /// Converts the specified <typeparamref name="TComponent"/> to it's corresponding <typeparamref name="TModel"/> representation.
-        /// </summary>
-        /// <param name="component">
-        /// The <typeparamref name="TComponent"/> to convert to an <typeparamref name="TModel"/>. 
-        /// Cannot be <see langword="null"/>.
-        /// </param>
-        /// <param name="host">
-        /// The asynchronous lifecycle host that manages the entity's lifecycle. 
-        /// Cannot be <see langword="null"/>.
-        /// </param>
-        /// <returns>The model representation of the specified component node.</returns>
-        protected abstract object ToModel(TComponent component, IAsyncLifecycle host);
+        IGraphNode IGraphConverter.ToGraph(object sceneMember, IAsyncLifecycle host, object model, IGraphNode? parent)
+        {
+            throw new NotSupportedException($"Cannot create a component from a scene member.");
+        }
     }
 }

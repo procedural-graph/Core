@@ -23,7 +23,7 @@ namespace ProceduralGraph.Generic.Converters
     /// <see cref="IEquatable{TKey}"/>.
     /// </typeparam>
     /// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-    public abstract class SerializedGraphEntityConverter<TEntity, TModel, TKey, TValue> : IGraphConverter 
+    public abstract class SerializedGraphEntityConverter<TEntity, TModel, TKey, TValue> : GraphConverter, IGraphConverter 
         where TEntity : LifecycleGraphNode<TKey, TValue>
         where TKey : struct, IEquatable<TKey>
         where TValue : class
@@ -34,20 +34,13 @@ namespace ProceduralGraph.Generic.Converters
 #else
         private static readonly ImmutableArray<Type> _supportedTypes = ImmutableArray.Create(typeof(TEntity), typeof(TModel));
 #endif
-        /// <inheritdoc cref="IGraphConverter.SupportedTypes"/>
-        public virtual ImmutableArray<Type> SupportedTypes => _supportedTypes;
-        IReadOnlyCollection<Type> IGraphConverter.SupportedTypes => _supportedTypes;
+        /// <inheritdoc/>
+        public override ImmutableArray<Type> SupportedTypes => _supportedTypes;
 
         /// <inheritdoc/>
-        public virtual bool CanConvert([NotNullWhen(true)] object? obj)
+        public override bool CanConvert([NotNullWhen(true)] object? obj)
         {
             return obj is TEntity || obj is TModel;
-        }
-
-        /// <inheritdoc/>
-        public virtual int CompareTo(IGraphConverter? other)
-        {
-            return 0;
         }
 
         IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent) => ToEntity((TModel)obj, host, parent);

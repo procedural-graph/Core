@@ -12,6 +12,21 @@ using System.Diagnostics.CodeAnalysis;
 
 namespace ProceduralGraph.Generic.Converters
 {
+    /// <inheritdoc/>
+    /// <typeparam name="T">The type of graph node being converted. Must implement <see cref="IGraphNode"/>.</typeparam>
+    public abstract class GraphConverter<T> : GraphConverter, IGraphConverter where T : IGraphNode
+    {
+        IGraphNode IGraphConverter.ToGraph(object sceneMember, IAsyncLifecycle host, object model, IGraphNode? parent)
+        {
+            throw new NotSupportedException($"{typeof(T).FullName} does not support serialization.");
+        }
+
+        object IGraphConverter.ToModel(IGraphNode node, IAsyncLifecycle host)
+        {
+            throw new NotSupportedException($"{typeof(T).FullName} does not support serialization.");
+        }
+    }
+
     /// <summary>
     /// Provides a base class for converting between object models and graph representations.
     /// </summary>
@@ -29,12 +44,17 @@ namespace ProceduralGraph.Generic.Converters
 
         IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent)
         {
-            throw new NotSupportedException($"The {GetType().Name} does not support converting to a graph representation.");
+            throw new NotImplementedException();
+        }
+
+        IGraphNode IGraphConverter.ToGraph(object sceneMember, IAsyncLifecycle host, object model, IGraphNode? parent)
+        {
+            throw new NotImplementedException();
         }
 
         object IGraphConverter.ToModel(IGraphNode node, IAsyncLifecycle host)
         {
-            throw new NotSupportedException($"The {GetType().Name} does not support converting to a model representation.");
+            throw new NotImplementedException();
         }
     }
 }

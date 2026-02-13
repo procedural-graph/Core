@@ -38,6 +38,15 @@ namespace ProceduralGraph
         IGraphNode ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent = default);
 
         /// <summary>
+        /// Converts the specified scene member into a procedural graph node using the provided model for additional context.
+        /// </summary>
+        /// <param name="sceneMember">The scene member to convert into a procedural graph node.</param>
+        /// <param name="host">The manager handling the creation and disposal of procedural entities.</param>
+        /// <param name="model">The model object to convert into a procedural graph node.</param>
+        /// <param name="parent">The parent entity in the graph hierarchy, if applicable.</param>
+        IGraphNode ToGraph(object sceneMember, IAsyncLifecycle host, object model, IGraphNode? parent = default);
+
+        /// <summary>
         /// Converts a procedural graph node into it's model representation.
         /// </summary>
         /// <param name="node">The <see cref="IGraphNode"/> to transform.</param>
