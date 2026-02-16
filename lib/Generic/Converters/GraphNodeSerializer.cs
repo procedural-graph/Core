@@ -26,14 +26,14 @@ namespace ProceduralGraph.Generic.Converters
         /// The <typeparamref name="TNode"/> to convert to an <typeparamref name="TModel"/>. 
         /// Cannot be <see langword="null"/>.
         /// </param>
-        /// <param name="host">
+        /// <param name="root">
         /// The asynchronous lifecycle host that manages the entity's lifecycle. 
         /// Cannot be <see langword="null"/>.
         /// </param>
         /// <returns>The model representation of the specified entity node.</returns>
-        protected abstract TModel ToModel(TNode node, IAsyncLifecycle host);
+        protected abstract TModel ToModel(TNode node, IGraph root);
 
-        object IGraphConverter.ToModel(IGraphNode node, IAsyncLifecycle host)
+        object IGraphConverter.ToModel(IGraphNode node, IGraph host)
         {
             TNode typedNode = node as TNode ?? throw new ArgumentException($"Must be of type {typeof(TNode)}.", nameof(node));
             return ToModel(typedNode, host);

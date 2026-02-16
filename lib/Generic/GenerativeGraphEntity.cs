@@ -25,14 +25,70 @@ namespace ProceduralGraph.Generic
         where TKey : struct, IEquatable<TKey>
         where TValue : class
     {
-        internal sealed class DescendantCollection : ICollection<IGraphNode>
+        /// <summary>
+        /// Represents a collection of all immediate descendant nodes, including both components and child entities, of
+        /// a generative graph entity.
+        /// </summary>
+        public sealed class DescendantCollection : ICollection<IGraphNode>
         {
+            /// <summary>
+            /// Enumerates the nodes within a generative graph entity, providing sequential access to its components and
+            /// child entities as graph nodes.
+            /// </summary>
+            public struct Enumerator : IEnumerator<IGraphNode>
+            {
+                private readonly GenerativeGraphEntity<TKey, TValue> _owner;
+                private readonly IEnumerator<GraphComponent<TKey, TValue>> _componentsEnumerator;
+                private readonly ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator _childrenEnumerator;
+                private IGraphNode? _current;
+                /// <inheritdoc/>
+                public readonly IGraphNode Current => _current!;
+                readonly object IEnumerator.Current => Current;
+                internal Enumerator(GenerativeGraphEntity<TKey, TValue> owner)
+                {
+                    _owner = owner;
+                    _componentsEnumerator = owner.Components.GetEnumerator();
+                    _childrenEnumerator = owner.Children.GetEnumerator();
+                    _current = null;
+                }
+                /// <inheritdoc/>
+                public bool MoveNext()
+                {
+                    if (_componentsEnumerator.MoveNext())
+                    {
+                        _current = _componentsEnumerator.Current;
+                        return true;
+                    }
+                    if (_childrenEnumerator.MoveNext())
+                    {
+                        _current = _childrenEnumerator.Current;
+                        return true;
+                    }
+                    return false;
+                }
+                /// <inheritdoc/>
+                public void Reset()
+                {
+                    _componentsEnumerator.Reset();
+                    _childrenEnumerator.Reset();
+                    _current = null!;
+                }
+                /// <inheritdoc/>
+                public readonly void Dispose()
+                {
+                    _componentsEnumerator.Dispose();
+                    _childrenEnumerator.Dispose();
+                }
+            }
+
             private readonly GenerativeGraphEntity<TKey, TValue> _owner;
 
+            /// <inheritdoc/>
             public int Count => _owner.Children.Count + _owner.Components.Count;
 
             bool ICollection<IGraphNode>.IsReadOnly => false;
 
+            /// <inheritdoc/>
             public void Add(IGraphNode item)
             {
                 switch (item)
@@ -43,6 +99,7 @@ namespace ProceduralGraph.Generic
                 }
             }
 
+            /// <inheritdoc/>
             public bool Contains(IGraphNode item) => item switch
             {
                 GraphComponent<TKey, TValue> component => _owner.Components.Contains(component),
@@ -50,6 +107,7 @@ namespace ProceduralGraph.Generic
                 _ => false
             };
 
+            /// <inheritdoc/>
             public void CopyTo(IGraphNode[] array, int arrayIndex)
             {
 #if NET7_0_OR_GREATER
@@ -73,6 +131,7 @@ namespace ProceduralGraph.Generic
                 ((ICollection<IGraphNode>)_owner.Children).CopyTo(array, arrayIndex);
             }
 
+            /// <inheritdoc/>
             public bool Remove(IGraphNode item) => item switch
             {
                 GraphComponent<TKey, TValue> component => _owner.Components.Remove(component),
@@ -85,21 +144,15 @@ namespace ProceduralGraph.Generic
                 _owner = owner;
             }
 
-            public IEnumerator<IGraphNode> GetEnumerator()
+            /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
+            public Enumerator GetEnumerator()
             {
-                using (ImmutableList<GraphComponent<TKey, TValue>>.Enumerator componentsEnumerator = _owner._components!.GetEnumerator())
-                {
-                    while (componentsEnumerator.MoveNext())
-                    {
-                        yield return componentsEnumerator.Current;
-                    }
-                }
+                return new Enumerator(_owner);
+            }
 
-                using ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator childrenEnumerator = _owner.Children.GetEnumerator();
-                while (childrenEnumerator.MoveNext())
-                {
-                    yield return childrenEnumerator.Current;
-                }
+            IEnumerator<IGraphNode> IEnumerable<IGraphNode>.GetEnumerator()
+            {
+                return GetEnumerator();
             }
 
             IEnumerator IEnumerable.GetEnumerator()

@@ -19,7 +19,7 @@ namespace ProceduralGraph.Generic
         {
             CancellationTokenSource cts = base.BuildCancellationTokenSource(stoppingToken);
             _components = new ConcurrentList<GraphComponent<TKey, TValue>>();
-            _componentEventHandler = HandleCollectionEventsAsync(_components, OnComponentAdded, OnComponentRemoved, Logger, cts.Token);
+            _componentEventHandler = HandleCollectionEventsAsync(_components, OnComponentAdded, OnComponentRemoved, Graph.Logger, cts.Token);
             return cts;
         }
 

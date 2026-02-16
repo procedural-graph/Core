@@ -17,7 +17,7 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue>
     {
         CancellationTokenSource cts = base.BuildCancellationTokenSource(stoppingToken);
         _components = [];
-        _componentEventHandler = HandleCollectionEventsAsync(_components, OnComponentAdded, OnComponentRemoved, Logger, cts.Token);
+        _componentEventHandler = HandleCollectionEventsAsync(_components, OnComponentAdded, OnComponentRemoved, Graph.Logger, cts.Token);
         return cts;
     }
 

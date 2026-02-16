@@ -7,7 +7,6 @@
 // Internal Use Only.
 using System;
 using System.Collections.Immutable;
-using System.Diagnostics.CodeAnalysis;
 
 namespace ProceduralGraph.Generic.Converters
 {
@@ -55,7 +54,7 @@ namespace ProceduralGraph.Generic.Converters
         /// <returns>The entity representation of the specified model.</returns>
         protected abstract IGraphNode ToComponent(TModel model, IAsyncLifecycle host, TEntity entity);
 
-        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent)
+        IGraphNode IGraphConverter.ToGraph(object obj, IGraph root, IGraphNode? parent)
         {
 #if NET7_0_OR_GREATER
             ArgumentNullException.ThrowIfNull(parent, nameof(parent));
@@ -67,10 +66,10 @@ namespace ProceduralGraph.Generic.Converters
 #endif
             TEntity typedEntity = parent as TEntity ?? throw new ArgumentException($"Must be of type {typeof(TEntity)}.", nameof(parent));
             TModel typedModel = obj as TModel ?? throw new ArgumentException($"Must be of type {typeof(TModel)}.", nameof(obj));
-            return ToComponent(typedModel, host, typedEntity);
+            return ToComponent(typedModel, root, typedEntity);
         }
 
-        IGraphNode IGraphConverter.ToGraph(object sceneMember, IAsyncLifecycle host, object model, IGraphNode? parent)
+        IGraphNode IGraphConverter.ToGraph(object sceneMember, IGraph root, object model, IGraphNode? parent)
         {
             throw new NotSupportedException($"Cannot create a component from a scene member.");
         }

@@ -52,7 +52,7 @@ namespace ProceduralGraph.Generic.Converters
         /// The <typeparamref name="TSceneMember"/> to convert to an <typeparamref name="TEntity"/>. 
         /// Cannot be <see langword="null"/>.
         /// </param>
-        /// <param name="host">
+        /// <param name="root">
         /// The asynchronous lifecycle host that manages the entity's lifecycle. 
         /// Cannot be <see langword="null"/>.
         /// </param>
@@ -61,8 +61,8 @@ namespace ProceduralGraph.Generic.Converters
         /// or <see langword="null"/> if the entity has no parent.
         /// </param>
         /// <returns>The entity representation of the specified scene member.</returns>
-        protected abstract TEntity ToEntity(TSceneMember sceneMember, IAsyncLifecycle host, IGraphNode? parent = null);
+        protected abstract TEntity ToEntity(TSceneMember sceneMember, IGraph root, IGraphNode? parent = null);
 
-        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent) => ToEntity((TSceneMember)obj, host, parent);
+        IGraphNode IGraphConverter.ToGraph(object obj, IGraph root, IGraphNode? parent) => ToEntity((TSceneMember)obj, root, parent);
     }
 }

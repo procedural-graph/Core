@@ -61,7 +61,7 @@ namespace ProceduralGraph.Generic.Converters
         /// The <typeparamref name="TSceneMember"/> to convert to an <typeparamref name="TEntity"/>. 
         /// Cannot be <see langword="null"/>.
         /// </param>
-        /// <param name="host">
+        /// <param name="root">
         /// The asynchronous lifecycle host that manages the entity's lifecycle. 
         /// Cannot be <see langword="null"/>.
         /// </param>
@@ -71,14 +71,14 @@ namespace ProceduralGraph.Generic.Converters
         /// or <see langword="null"/> if the entity has no parent.
         /// </param>
         /// <returns>The entity representation of the specified scene member.</returns>
-        protected abstract TEntity ToEntity(TSceneMember sceneMember, IAsyncLifecycle host, TModel? model, IGraphNode? parent = null);
+        protected abstract TEntity ToEntity(TSceneMember sceneMember, IGraph root, TModel? model, IGraphNode? parent = null);
 
-        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent)
+        IGraphNode IGraphConverter.ToGraph(object obj, IGraph root, IGraphNode? parent)
         {
             try
             {
                 TSceneMember typedSceneMember = obj as TSceneMember ?? throw new ArgumentException($"Must be of type {typeof(TSceneMember)}.", nameof(obj));
-                return ToEntity(typedSceneMember, host, null, parent);
+                return ToEntity(typedSceneMember, root, null, parent);
             }
             catch (ArgumentException ex) when (obj is TModel)
             {
@@ -87,11 +87,11 @@ namespace ProceduralGraph.Generic.Converters
             }
         }
 
-        IGraphNode IGraphConverter.ToGraph(object sceneMember, IAsyncLifecycle host, object model, IGraphNode? parent)
+        IGraphNode IGraphConverter.ToGraph(object sceneMember, IGraph root, object model, IGraphNode? parent)
         {
             TSceneMember typedSceneMember = sceneMember as TSceneMember ?? throw new ArgumentException($"Must be of type {typeof(TSceneMember)}", nameof(sceneMember));
             TModel typedModel = model as TModel ?? throw new ArgumentException($"Must be of type {typeof(TModel)}", nameof(model));
-            return ToEntity(typedSceneMember, host, typedModel, parent);
+            return ToEntity(typedSceneMember, root, typedModel, parent);
         }
     }
 }

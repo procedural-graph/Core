@@ -35,7 +35,7 @@ namespace ProceduralGraph.Generic
         /// <summary>
         /// Gets the graph this entity belongs to.
         /// </summary>
-        protected abstract Graph<TKey, TValue> Graph { get; }
+        protected abstract IGraph Graph { get; }
 
         /// <inheritdoc cref="IGraphNode.Parent"/>
         public abstract GraphEntity<TKey, TValue>? Parent { get; }
@@ -70,7 +70,7 @@ namespace ProceduralGraph.Generic
             CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, parentStoppingToken);
 
             _children = new ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>(SceneMemberIdentity);
-            _childEventHandling = HandleCollectionEventsAsync(_children, OnChildAdded, OnChildRemoved, Logger, cts.Token);
+            _childEventHandling = HandleCollectionEventsAsync(_children, OnChildAdded, OnChildRemoved, Graph.Logger, cts.Token);
 
             return cts;
         }
@@ -92,7 +92,7 @@ namespace ProceduralGraph.Generic
         protected override void Stop()
         {
             ValueTask stopTask = StopAsync(Graph.StoppingToken);
-            stopTask.Forget(Logger, this, CancellationToken.None);
+            stopTask.Forget(Graph.Logger, this, CancellationToken.None);
         }
 
         /// <summary>
@@ -213,7 +213,7 @@ namespace ProceduralGraph.Generic
                 {
                     if (currentLifetime.IsFaulted)
                     {
-                        Logger.LogException(currentLifetime.Exception!, current);
+                        Graph.Logger.LogException(currentLifetime.Exception!, current);
                     }
 
                     current.Dispose();
@@ -233,7 +233,7 @@ namespace ProceduralGraph.Generic
             }
             catch (Exception ex)
             {
-                Logger.LogException(ex, this);
+                Graph.Logger.LogException(ex, this);
             }
         }
     }

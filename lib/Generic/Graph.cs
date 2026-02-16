@@ -26,6 +26,7 @@ namespace ProceduralGraph.Generic
     public abstract partial class Graph<TKey, TValue> : 
         LifecycleGraphNode<TKey, TValue>, 
         IGraphNode,
+        IGraph,
         IDictionary<TValue, GraphEntity<TKey, TValue>> 
         where TKey : struct, IEquatable<TKey> 
         where TValue : class
@@ -34,6 +35,11 @@ namespace ProceduralGraph.Generic
         /// Gets the collection of graph converters used to serialize and deserialize graph elements.
         /// </summary>
         public abstract IGraphConverterProvider Converters { get; }
+
+        /// <summary>
+        /// Gets the logger instance used to record diagnostic and operational messages for the current node.
+        /// </summary>
+        public abstract ILogger Logger { get; }
 
         /// <summary>
         /// Gets the provider that supplies information about scene members for the specified key and value types.
@@ -64,6 +70,13 @@ namespace ProceduralGraph.Generic
         {
             get => _roots![key];
             set => _roots![key] = value;
+        }
+
+        /// <inheritdoc/>
+        protected override void Stop()
+        {
+            ValueTask stopTask = StopAsync(CancellationToken.None);
+            stopTask.Forget(Logger, this, CancellationToken.None);
         }
 
         /// <inheritdoc/>

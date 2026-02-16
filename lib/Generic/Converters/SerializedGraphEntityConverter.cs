@@ -6,7 +6,6 @@
 //
 // Internal Use Only.
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 
@@ -43,9 +42,9 @@ namespace ProceduralGraph.Generic.Converters
             return obj is TEntity || obj is TModel;
         }
 
-        IGraphNode IGraphConverter.ToGraph(object obj, IAsyncLifecycle host, IGraphNode? parent) => ToEntity((TModel)obj, host, parent);
+        IGraphNode IGraphConverter.ToGraph(object obj, IGraph root, IGraphNode? parent) => ToEntity((TModel)obj, root, parent);
 
-        object IGraphConverter.ToModel(IGraphNode node, IAsyncLifecycle host) => ToModel((TEntity)node, host);
+        object IGraphConverter.ToModel(IGraphNode node, IGraph root) => ToModel((TEntity)node, root);
 
         /// <summary>
         /// Converts the specified <typeparamref name="TModel"/> to it's corresponding <typeparamref name="TEntity"/> representation.
@@ -54,7 +53,7 @@ namespace ProceduralGraph.Generic.Converters
         /// The <typeparamref name="TModel"/> to convert to an <typeparamref name="TEntity"/>. 
         /// Cannot be <see langword="null"/>.
         /// </param>
-        /// <param name="host">
+        /// <param name="root">
         /// The asynchronous lifecycle host that manages the entity's lifecycle. 
         /// Cannot be <see langword="null"/>.
         /// </param>
@@ -63,7 +62,7 @@ namespace ProceduralGraph.Generic.Converters
         /// or <see langword="null"/> if the entity has no parent.
         /// </param>
         /// <returns>The entity representation of the specified model.</returns>
-        protected abstract TEntity ToEntity(TModel model, IAsyncLifecycle host, IGraphNode? parent = null);
+        protected abstract TEntity ToEntity(TModel model, IGraph root, IGraphNode? parent = null);
 
         /// <summary>
         /// Converts the specified <typeparamref name="TEntity"/> to it's corresponding <typeparamref name="TModel"/> representation.
@@ -72,11 +71,11 @@ namespace ProceduralGraph.Generic.Converters
         /// The <typeparamref name="TEntity"/> to convert to an <typeparamref name="TModel"/>. 
         /// Cannot be <see langword="null"/>.
         /// </param>
-        /// <param name="host">
+        /// <param name="root">
         /// The asynchronous lifecycle host that manages the entity's lifecycle. 
         /// Cannot be <see langword="null"/>.
         /// </param>
         /// <returns>The model representation of the specified entity node.</returns>
-        protected abstract TModel ToModel(TEntity node, IAsyncLifecycle host);
+        protected abstract TModel ToModel(TEntity node, IGraph root);
     }
 }

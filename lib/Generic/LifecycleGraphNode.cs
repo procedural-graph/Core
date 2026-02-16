@@ -36,11 +36,6 @@ namespace ProceduralGraph.Generic
         public Task Lifetime => _lifetimeTcs.Task;
 
         /// <summary>
-        /// Gets the logger instance used to record diagnostic and operational messages for the current node.
-        /// </summary>
-        protected abstract ILogger Logger { get; }
-
-        /// <summary>
         /// Creates a new <see cref = "CancellationTokenSource" /> linked to the stopping token of the specified host.
         /// </summary>
         /// <param name="stoppingToken">Signals that the service should stop.</param>
@@ -72,11 +67,7 @@ namespace ProceduralGraph.Generic
         /// <summary>
         /// Initiates the stop operation for the specified graph node using the provided cancellation token.
         /// </summary>
-        protected virtual void Stop()
-        {
-            ValueTask stopTask = StopAsync(CancellationToken.None);
-            stopTask.Forget(Logger, this, CancellationToken.None);
-        }
+        protected abstract void Stop();
 
         private static EntityState OrMutator(EntityState current, EntityState value) => current | value;
 
