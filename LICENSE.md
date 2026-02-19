@@ -1,6 +1,6 @@
-# PolyForm Internal Use License 1.0.0
+# PolyForm Perimeter License 1.0.0
 
-<https://polyformproject.org/licenses/internal-use/1.0.0>
+<https://polyformproject.org/licenses/perimeter/1.0.0>
 
 ## Acceptance
 
@@ -10,13 +10,32 @@ your licenses.
 
 ## Copyright License
 
-The licensor grants you a copyright license for the software
-to do everything you might do with the software that would
-otherwise infringe the licensor's copyright in it for any
-permitted purpose.  However, you may only make changes or
-new works based on the software according to [Changes and New
-Works License](#changes-and-new-works-license), and you may
-not distribute the software.
+The licensor grants you a copyright license for the
+software to do everything you might do with the software
+that would otherwise infringe the licensor's copyright
+in it for any permitted purpose.  However, you may
+only distribute the software according to [Distribution
+License](#distribution-license) and make changes or new works
+based on the software according to [Changes and New Works
+License](#changes-and-new-works-license).
+
+## Distribution License
+
+The licensor grants you an additional copyright license
+to distribute copies of the software.  Your license
+to distribute covers distributing the software with
+changes and new works permitted by [Changes and New Works
+License](#changes-and-new-works-license).
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of
+the software from you also gets a copy of these terms or the
+URL for them above, as well as copies of any plain-text lines
+beginning with `Required Notice:` that the licensor provided
+with the software.  For example:
+
+> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
 
 ## Changes and New Works License
 
@@ -30,15 +49,26 @@ The licensor grants you a patent license for the software that
 covers patent claims the licensor can license, or becomes able
 to license, that you would infringe by using the software.
 
+## Noncompete
+
+Any purpose is a permitted purpose, except for providing to
+others any product that competes with the software.
+
+## Competition
+
+If you use this software to market a product as a substitute
+for the functionality or value of the software, it competes
+with the software. A product may compete regardless how it is
+designed or deployed. For example, a product may compete even
+if it provides its functionality via any kind of interface
+(including services, libraries or plug-ins), even if it is
+ported to a different platforms or programming languages,
+and even if it is provided free of charge.
+
 ## Fair Use
 
 You may have "fair use" rights for the software under the
 law. These terms do not limit them.
-
-## Internal Business Use
-
-Use of the software for the internal business operations of
-you and your company is use for a permitted purpose.
 
 ## No Other Rights
 
@@ -77,6 +107,9 @@ or nature of the software, under any kind of legal claim.***
 The **licensor** is the individual or entity offering these
 terms, and the **software** is the software the licensor makes
 available under these terms.
+
+A **product** can be a good or service, or a combination
+of them.
 
 **You** refers to the individual or entity agreeing to these
 terms.
