@@ -33,3 +33,11 @@ Procedural generation requires manipulating massive data sets, such as terrain h
   Procedural Graph: Roads
 - **Stride 4.3**\
   Procedural Graph: Core
+
+## License
+
+This project is licensed under the **PolyForm Perimeter License 1.0.0**.
+
+> **Summary:** You are free to use, modify, and distribute this software, provided you do not use it to build a product that competes with the software itself.
+
+Please see the [LICENSE.md](LICENSE.md) file for the full legal text.
