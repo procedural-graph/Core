@@ -1,13 +1,11 @@
 <Solution>
-  <Folder Name="/lib/">
-    <Project Path="lib/Collections/Collections.csproj" Id="122a591d-8a9f-4261-9c17-6d4ff4b69a7b" />
-    <Project Path="lib/Core/Core.csproj" />
-    <Project Path="lib/Generic/Generic.csproj" Id="e5c845b2-c7df-43e7-a38a-469bfa78b8e7" />
-    <Project Path="lib/Mathematics/Mathematics.csproj" Id="0a0de0de-2d80-43cb-9cb9-3692e156ba00" />
-  </Folder>
   <Folder Name="/modules/" />
   <Folder Name="/modules/Terrain/">
     <Project Path="modules/terrain/Core/Core.csproj" Id="b8023df7-591e-4018-bdfa-93b22eb4258a" />
     <Project Path="modules/terrain/Generic/Generic.csproj" Id="c63a0347-24bc-4442-b1fc-dddc81c99aa0" />
   </Folder>
+  <Project Path="Collections/Collections.csproj" />
+  <Project Path="Core/Core.csproj" />
+  <Project Path="Generic/Generic.csproj" />
+  <Project Path="Mathematics/Mathematics.csproj" />
 </Solution>
