@@ -4,15 +4,9 @@
     <TargetFramework>netstandard2.1</TargetFramework>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <RootNamespace>$(SolutionName)</RootNamespace>
-    <AssemblyName>$(SolutionName)</AssemblyName>
+    <AssemblyName>ProceduralGraph</AssemblyName>
+    <RootNamespace>$(AssemblyName)</RootNamespace>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <GenerateDependencyFile>false</GenerateDependencyFile>
-    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
-    <DebugType>portable</DebugType>
-    <DebugSymbols>true</DebugSymbols>
-    <OutputPath>..\..\bin\$(Configuration)\</OutputPath>
-    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
 </Project>
