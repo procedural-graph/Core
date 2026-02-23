@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Globalization;
+using System.Numerics;
 
 namespace ProceduralGraph.Mathematics
 {
@@ -8,10 +9,10 @@ namespace ProceduralGraph.Mathematics
     /// </summary>
     public unsafe struct Int3 : IVector3<Int3, int>
 #if NET7_0_OR_GREATER
-        , System.Numerics.IAdditionOperators<Int3, int, Int3>,
-        System.Numerics.ISubtractionOperators<Int3, int, Int3>,
-        System.Numerics.IMultiplyOperators<Int3, int, Int3>,
-        System.Numerics.IDivisionOperators<Int3, int, Int3>
+        , IAdditionOperators<Int3, int, Int3>,
+        ISubtractionOperators<Int3, int, Int3>,
+        IMultiplyOperators<Int3, int, Int3>,
+        IDivisionOperators<Int3, int, Int3>
 #endif
     {
         private const int ComponentCount = 3;
@@ -184,6 +185,16 @@ namespace ProceduralGraph.Mathematics
         public static Int3 operator /(Int3 left, int right)
         {
             return new Int3(left.X / right, left.Y / right, left.Z / right);
+        }
+
+        /// <summary>
+        /// Implicitly converts a <see cref="Int3"/> to a <see cref="Vector3"/> by 
+        /// converting each component to a single-precision floating-point number.
+        /// </summary>
+        /// <param name="value">The <see cref="Int3"/> value to convert.</param>
+        public static implicit operator Vector3(Int3 value)
+        {
+            return new Vector3(value.X, value.Y, value.Z);
         }
     }
 }
