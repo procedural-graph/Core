@@ -205,7 +205,7 @@ namespace ProceduralGraph.Collections.Unsafe
 
             if (buffer != null)
             {
-                UnmanagedMarshal.Free(buffer);
+                UnmanagedMarshal.Free(buffer, Length);
                 buffer = null;
             }
 
