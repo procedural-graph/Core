@@ -1,315 +1,218 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
-using System.Threading.Tasks;
 
-namespace ProceduralGraph.Collections
+namespace ProceduralGraph.Collections;
+
+/// <summary>
+/// Represents a thread-safe, mutable list that supports concurrent add, remove, and update operations.
+/// </summary>
+/// <typeparam name="T">The type of elements contained in the list.</typeparam>
+public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumerator>, ICollection<T>, IList<T>
 {
+    private ImmutableList<T> _items;
+
+    private readonly IEqualityComparer<T> _comparer;
+
+    /// <inheritdoc/>
+    public override int Count => _items.Count;
+
+    bool ICollection<T>.IsReadOnly => false;
+
     /// <summary>
-    /// Represents a thread-safe, mutable list that supports concurrent add, remove, and update operations.
+    /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class that contains elements copied from the specified
+    /// collection and uses the specified equality comparer for item comparisons.
     /// </summary>
-    /// <typeparam name="T">The type of elements contained in the list.</typeparam>
-    public partial class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumerator>, ICollection<T>, IList<T>
+    /// <param name="collection">The collection whose elements are copied to the new list. 
+    /// This parameter cannot be <see langword="null"/>.
+    /// </param>
+    /// <param name="comparer">The equality comparer to use for comparing items in the list. 
+    /// This parameter cannot be <see langword="null"/>.
+    /// </param>
+    public ConcurrentList(IEnumerable<T> collection, IEqualityComparer<T> comparer)
     {
-        private volatile ImmutableList<T> _items;
+        ThrowHelpers.ThrowIf(collection is null, nameof(collection), ThrowHelpers.CreateArgumentNullException);
+        _items = [.. collection];
 
-        /// <inheritdoc/>
-        public override int Count => _items.Count;
+        ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
+        _comparer = comparer;
+    }
 
-        bool ICollection<T>.IsReadOnly => false;
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class that contains elements copied from the specified
+    /// collection.
+    /// </summary>
+    /// <param name="collection">The collection whose elements are copied to the new list. 
+    /// This parameter cannot be <see langword="null"/>.
+    /// </param>
+    public ConcurrentList(IEnumerable<T> collection)
+    {
+        ThrowHelpers.ThrowIf(collection is null, nameof(collection), ThrowHelpers.CreateArgumentNullException);
+        _comparer = EqualityComparer<T>.Default;
+        _items = [.. collection];
+    }
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class that is empty.
-        /// </summary>
-        public ConcurrentList()
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class using the specified equality comparer.
+    /// </summary>
+    /// <param name="comparer">The equality comparer to use for comparing items in the list. 
+    /// This parameter cannot be <see langword="null"/>.
+    /// </param>
+    public ConcurrentList(IEqualityComparer<T> comparer)
+    {
+        ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
+        _comparer = comparer;
+        _items = [];
+    }
+
+    /// <summary>
+    /// Initializes a new empty instance of the <see cref="ConcurrentList{T}"/> class using the default equality 
+    /// comparer of <typeparamref name="T"/>.
+    /// </summary>
+    public ConcurrentList()
+    {
+        _comparer = EqualityComparer<T>.Default;
+        _items = [];
+    }
+
+    /// <inheritdoc/>
+    public T this[int index]
+    {
+        get => _items[index];
+        set
         {
-#if NET8_0_OR_GREATER
-            _items = [];
-#else
-            _items = ImmutableList<T>.Empty;
-#endif
-        }
+            ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
 
-        /// <summary>
-        /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class that contains elements copied from the specified
-        /// collection.
-        /// </summary>
-        /// <param name="collection">The collection whose elements are copied to the new list. Cannot be <see langword="null"/>.</param>
-        public ConcurrentList(IEnumerable<T> collection)
-        {
-#if NET7_0_OR_GREATER
-            ArgumentNullException.ThrowIfNull(collection, nameof(collection));
-#else
-            if (collection is null)
+            T oldItem;
+
+            ImmutableList<T>? oldList, currentList = _items;
+            do
             {
-                throw new ArgumentNullException(nameof(collection));
-            }
-#endif
-#if NET8_0_OR_GREATER
-            _items = [.. collection];
-#else
-            _items = ImmutableList.CreateRange(collection);
-#endif
-        }
-
-        /// <inheritdoc/>
-        public T this[int index]
-        {
-            get => _items[index];
-            set => SetItem(index, value);
-        }
-
-
-        /// <inheritdoc/>
-        public void Add(T item)
-        {
-#if NET7_0_OR_GREATER
-            ArgumentNullException.ThrowIfNull(item, nameof(item));
-#else
-            if (item is null) throw new ArgumentNullException(nameof(item));
-#endif
-            ThrowIfCompleted();
-
-            SpinWait spinner = default;
-            while (true)
-            {
-                ImmutableList<T> original = _items;
-                ImmutableList<T> updated = original.Add(item);
-
-                if (Interlocked.CompareExchange(ref _items, updated, original) == original)
-                {
-                    RaiseCollectionChanged(item, ItemChangeType.Added);
-                    break;
-                }
-                spinner.SpinOnce();
-            }
-        }
-
-        /// <summary>
-        /// Asynchronously adds the specified item to the collection.
-        /// </summary>
-        /// <param name="item">The item to add to the collection. Cannot be <see langword="null"/>.</param>
-        /// <param name="cancellationToken">A cancellation token that can be used to cancel the add operation.</param>
-        /// <returns>A <see cref="ValueTask"/> that represents the asynchronous add operation.</returns>
-        public async ValueTask AddAsync(T item, CancellationToken cancellationToken = default)
-        {
-#if NET7_0_OR_GREATER
-            ArgumentNullException.ThrowIfNull(item, nameof(item));
-#else
-            if (item is null) throw new ArgumentNullException(nameof(item));
-#endif
-            ThrowIfCompleted();
-
-            SpinWait spinner = default;
-            while (true)
-            {
-                ImmutableList<T> original = _items;
-                ImmutableList<T> updated = original.Add(item);
-
-                if (Interlocked.CompareExchange(ref _items, updated, original) == original)
-                {
-                    RaiseCollectionChanged(item, ItemChangeType.Added);
-                    break;
-                }
-                spinner.SpinOnce();
-            }
-        }
-
-        /// <inheritdoc/>
-        public bool Remove(T item)
-        {
-#if NET7_0_OR_GREATER
-            ArgumentNullException.ThrowIfNull(item, nameof(item));
-#else
-            if (item is null) throw new ArgumentNullException(nameof(item));
-#endif
-            ThrowIfCompleted();
-
-            SpinWait spinner = default;
-            while (true)
-            {
-                ImmutableList<T> original = _items;
-                ImmutableList<T> updated = original.Remove(item);
-
-                if (original == updated)
-                {
-                    return false;
-                }
-
-                if (Interlocked.CompareExchange(ref _items, updated, original) == original)
-                {
-                    RaiseCollectionChanged(item, ItemChangeType.Removed);
-                    return true;
-                }
-                spinner.SpinOnce();
-            }
-        }
-
-        /// <summary>
-        /// Asynchronously removes the specified item from the collection, if it exists.
-        /// </summary>
-        /// <param name="item">The item to remove from the collection. Cannot be <see langword="null"/>.</param>
-        /// <param name="cancellationToken">A cancellation token that can be used to cancel the remove operation.</param>
-        /// <returns>
-        /// A <see cref="ValueTask"/> that represents the asynchronous remove operation. The result is <see langword="true"/> 
-        /// if the item found and was successfully removed; otherwise, <see langword="false"/>.
-        /// </returns>
-        public async ValueTask<bool> RemoveAsync(T item, CancellationToken cancellationToken = default)
-        {
-#if NET7_0_OR_GREATER
-            ArgumentNullException.ThrowIfNull(item, nameof(item));
-#else
-            if (item is null) throw new ArgumentNullException(nameof(item));
-#endif
-            ThrowIfCompleted();
-
-            SpinWait spinner = default;
-            while (true)
-            {
-                ImmutableList<T> original = _items;
-                ImmutableList<T> updated = original.Remove(item);
-
-                if (original == updated)
-                {
-                    return false;
-                }
-
-                if (Interlocked.CompareExchange(ref _items, updated, original) == original)
-                {
-                    RaiseCollectionChanged(item, ItemChangeType.Removed);
-                    return true;
-                }
-                spinner.SpinOnce();
-            }
-        }
-
-        /// <inheritdoc/>
-        public void RemoveAt(int index)
-        {
-            ThrowIfCompleted();
-            SpinWait spinner = default;
-            while (true)
-            {
-                ImmutableList<T> original = _items;
-
-                if (index < 0 || index >= original.Count)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(index));
-                }
-
-                T itemToRemove = original[index];
-                ImmutableList<T> updated = original.RemoveAt(index);
-
-                if (Interlocked.CompareExchange(ref _items, updated, original) == original)
-                {
-                    RaiseCollectionChanged(itemToRemove, ItemChangeType.Removed);
-                    break;
-                }
-                spinner.SpinOnce();
-            }
-        }
-
-        /// <inheritdoc/>
-        public override bool Contains(T item)
-        {
-            return _items.Contains(item);
-        }
-
-        /// <inheritdoc/>
-        public int IndexOf(T item)
-        {
-            return _items.IndexOf(item);
-        }
-
-        /// <inheritdoc/>
-        public void Clear()
-        {
-            ThrowIfCompleted();
-            while (true)
-            {
-                ImmutableList<T> original = _items;
-                if (original.IsEmpty) return;
-
-                if (Interlocked.CompareExchange(ref _items, ImmutableList<T>.Empty, original) == original)
-                {
-                    foreach (var item in original)
-                    {
-                        RaiseCollectionChanged(item, ItemChangeType.Removed);
-                    }
-                    return;
-                }
-            }
-        }
-
-        /// <inheritdoc/>
-        public override void CopyTo(T[] array, int arrayIndex)
-        {
-            _items.CopyTo(array, arrayIndex);
-        }
-
-        private void SetItem(int index, T item)
-        {
-#if NET7_0_OR_GREATER
-            ArgumentNullException.ThrowIfNull(item, nameof(item));
-#else
-            if (item is null) throw new ArgumentNullException(nameof(item));
-#endif
-            ThrowIfCompleted();
-
-            SpinWait spinner = default;
-            while (true)
-            {
-                ImmutableList<T> original = _items;
-
-                if (index < 0 || index >= original.Count)
-                {
-                    throw new ArgumentOutOfRangeException(nameof(index));
-                }
-
-                T oldItem = original[index];
-
-                if (EqualityComparer<T>.Default.Equals(oldItem, item))
+                oldList = currentList;
+                ThrowHelpers.ThrowIf((uint)index >= oldList.Count, index, ThrowHelpers.CreateArgumentOutOfRangeException);
+                oldItem = oldList[index];
+                ImmutableList<T> newList = oldList.Replace(oldItem, value, _comparer);
+                if (ReferenceEquals(newList, oldList))
                 {
                     return;
                 }
-
-                ImmutableList<T> updated = original.SetItem(index, item);
-
-                if (Interlocked.CompareExchange(ref _items, updated, original) == original)
-                {
-                    RaiseCollectionChanged(oldItem, ItemChangeType.Removed);
-                    RaiseCollectionChanged(item, ItemChangeType.Added);
-                    break;
-                }
-                spinner.SpinOnce();
+                currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
             }
-        }
+            while (!ReferenceEquals(currentList, oldList));
 
-        /// <inheritdoc/>
-        public void Insert(int index, T item)
+            RaiseCollectionChanged(oldItem, ItemChangeType.Removed);
+            RaiseCollectionChanged(value, ItemChangeType.Added);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Add(T item)
+    {
+        ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+
+        ImmutableList<T>? oldList, currentList = _items;
+        do
         {
-            ImmutableList<T> oldValue = _items;
-            ImmutableList<T> newValue;
-            SpinWait spinner = default;
-            while (true)
+            oldList = currentList;
+            ImmutableList<T> newList = oldList.Add(item);
+            currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
+        }
+        while (!ReferenceEquals(currentList, oldList));
+
+        RaiseCollectionChanged(item, ItemChangeType.Added);
+    }
+
+    /// <inheritdoc/>
+    public bool Remove(T item)
+    {
+        ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+
+        ImmutableList<T>? oldList, currentList = _items;
+        do
+        {
+            oldList = currentList;
+            ImmutableList<T> newList = oldList.Remove(item, _comparer);
+            if (ReferenceEquals(newList, oldList))
             {
-                newValue = oldValue.Insert(index, item);
-                ImmutableList<T> currentValue = Interlocked.CompareExchange(ref _items, newValue, oldValue);
-                if (currentValue == oldValue)
-                {
-                    RaiseCollectionChanged(item, ItemChangeType.Added);
-                    break;
-                }
-                oldValue = currentValue;
-                spinner.SpinOnce();
+                return false;
             }
+            currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
         }
+        while (!ReferenceEquals(currentList, oldList));
 
-        /// <inheritdoc/>
-        public override ImmutableList<T>.Enumerator GetEnumerator()
+        RaiseCollectionChanged(item, ItemChangeType.Removed);
+
+        return true;
+    }
+
+    /// <inheritdoc/>
+    public void RemoveAt(int index)
+    {
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+
+        ImmutableList<T>? oldList, currentList = _items;
+        do
         {
-            return _items.GetEnumerator();
+            oldList = currentList;
+            ThrowHelpers.ThrowIf((uint)index >= oldList.Count, index, ThrowHelpers.CreateArgumentOutOfRangeException);
+            ImmutableList<T> newList = oldList.RemoveAt(index);
+            currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
         }
+        while (!ReferenceEquals(currentList, oldList));
+
+        RaiseCollectionChanged(currentList[index], ItemChangeType.Removed);
+    }
+
+    /// <inheritdoc/>
+    public override bool Contains(T item)
+    {
+        return _items.Contains(item);
+    }
+
+    /// <inheritdoc/>
+    public int IndexOf(T item)
+    {
+        return _items.IndexOf(item);
+    }
+
+    /// <inheritdoc/>
+    public void Clear()
+    {
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+        ImmutableList<T> oldList = Interlocked.Exchange(ref _items, []);
+        using ImmutableList<T>.Enumerator enumerator = oldList.GetEnumerator();
+        while (enumerator.MoveNext())
+        {
+            RaiseCollectionChanged(enumerator.Current, ItemChangeType.Removed);
+        }
+    }
+
+    /// <inheritdoc/>
+    public override void CopyTo(T[] array, int arrayIndex)
+    {
+        _items.CopyTo(array, arrayIndex);
+    }
+
+    /// <inheritdoc/>
+    public void Insert(int index, T item)
+    {
+        ImmutableList<T>? oldList, currentList = _items;
+        do
+        {
+            oldList = currentList;
+            ThrowHelpers.ThrowIf((uint)index >= oldList.Count, index, ThrowHelpers.CreateArgumentOutOfRangeException);
+            ImmutableList<T> newList = oldList.Insert(index, item);
+            currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
+        }
+        while (!ReferenceEquals(currentList, oldList));
+        RaiseCollectionChanged(item, ItemChangeType.Added);
+    }
+
+    /// <inheritdoc/>
+    public override ImmutableList<T>.Enumerator GetEnumerator()
+    {
+        return _items.GetEnumerator();
     }
 }
