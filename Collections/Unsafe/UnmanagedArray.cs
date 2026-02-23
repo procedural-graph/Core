@@ -11,14 +11,14 @@ namespace ProceduralGraph.Collections.Unsafe
     public sealed class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, ICloneable, IStructuralEquatable, IStructuralComparable where T : unmanaged
     {
         /// <inheritdoc/>
-        public override int Length { get; }
+        public override long Length { get; }
 
         /// <summary>
         /// Gets a reference to the element at the specified index.
         /// </summary>
         /// <param name="index">The zero-based index of the element to retrieve. Must be within the valid range of the collection.</param>
         /// <returns>A reference to the element at the specified index.</returns>
-        public unsafe ref T this[int index]
+        public unsafe ref T this[long index]
         {
             get
             {
@@ -40,7 +40,7 @@ namespace ProceduralGraph.Collections.Unsafe
             }
         }
 
-        unsafe T IList<T>.this[int index]
+        T IList<T>.this[int index]
         {
             get => this[index];
             set => this[index] = value;
@@ -51,7 +51,7 @@ namespace ProceduralGraph.Collections.Unsafe
         /// specified number of elements.
         /// </summary>
         /// <param name="elementCount">The number of elements to allocate in unmanaged memory. Must be zero or greater.</param>
-        public unsafe UnmanagedArray(int elementCount)
+        public unsafe UnmanagedArray(long elementCount)
         {
 #if NET7_0_OR_GREATER
             ArgumentOutOfRangeException.ThrowIfNegative(elementCount, nameof(elementCount));
@@ -65,7 +65,7 @@ namespace ProceduralGraph.Collections.Unsafe
             buffer = UnmanagedMarshal.AllocZeroed<T>(elementCount);
         }
 
-        internal unsafe UnmanagedArray(T* buffer, int elementCount)
+        internal unsafe UnmanagedArray(T* buffer, long elementCount)
         {
 #if NET7_0_OR_GREATER
             ArgumentOutOfRangeException.ThrowIfNegative(elementCount, nameof(elementCount));
@@ -77,6 +77,27 @@ namespace ProceduralGraph.Collections.Unsafe
 #endif
             Length = elementCount;
             this.buffer = buffer;
+        }
+
+        /// <inheritdoc cref="IList{T}.IndexOf"/>
+        public unsafe long IndexOf(T item)
+        {
+#if NET7_0_OR_GREATER
+            ObjectDisposedException.ThrowIf(disposed, this);
+#else
+            if (disposed)
+            {
+                throw new ObjectDisposedException(GetType().FullName);
+            }
+#endif
+            EqualityComparer<T> equalityComparer = EqualityComparer<T>.Default;
+            return UnmanagedMarshal.IndexOf(buffer, Length, item, equalityComparer);
+        }
+
+        /// <inheritdoc/>
+        public override bool Contains(T item)
+        {
+            return IndexOf(item) != -1L;
         }
 
         /// <inheritdoc cref="ICloneable.Clone"/>
@@ -225,6 +246,14 @@ namespace ProceduralGraph.Collections.Unsafe
         void IList<T>.RemoveAt(int index)
         {
             throw new NotSupportedException("Cannot remove items from a fixed-size collection.");
+        }
+
+        int IList<T>.IndexOf(T item)
+        {
+            checked
+            {
+                return (int)IndexOf(item);
+            }
         }
 
         object ICloneable.Clone() => Clone();

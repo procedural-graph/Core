@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Numerics;
-using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 namespace ProceduralGraph.Collections.Unsafe
@@ -37,8 +36,8 @@ namespace ProceduralGraph.Collections.Unsafe
                 throw new ObjectDisposedException(source.GetType().FullName);
             }
 #endif
-            int width = source.Width;
-            int height = source.Height;
+            long width = source.Width;
+            long height = source.Height;
             TSource* baseBuffer = source.buffer;
             Parallel.For(0, height, y =>
             {
@@ -77,8 +76,8 @@ namespace ProceduralGraph.Collections.Unsafe
                 throw new ObjectDisposedException(source.GetType().FullName);
             }
 #endif
-            int width = source.Width;
-            int height = source.Height;
+            long width = source.Width;
+            long height = source.Height;
             TSource* baseBuffer = source.buffer;
             int vectorSize = Vector<TSource>.Count;
             Parallel.For(0, height, y =>
@@ -159,8 +158,8 @@ namespace ProceduralGraph.Collections.Unsafe
                 throw new ArgumentOutOfRangeException(nameof(destination), $"Expected height {source.Height}, but got {destination.Height}.");
             }
 #endif
-            int width = source.Width;
-            int height = source.Height;
+            long width = source.Width;
+            long height = source.Height;
             TSource* sourceBuffer = source.buffer;
             TResult* destinationBuffer = destination.buffer;
             Parallel.For(0, height, y =>
@@ -231,8 +230,8 @@ namespace ProceduralGraph.Collections.Unsafe
                 throw new ArgumentOutOfRangeException(nameof(destination), $"Expected height {source.Height}, but got {destination.Height}.");
             }
 #endif
-            int width = source.Width;
-            int height = source.Height;
+            long width = source.Width;
+            long height = source.Height;
             TSource* sourceBuffer = source.buffer;
             TResult* destinationBuffer = destination.buffer;
             int vectorSize = Vector<TSource>.Count;
@@ -345,8 +344,8 @@ namespace ProceduralGraph.Collections.Unsafe
                 throw new ArgumentOutOfRangeException(nameof(source2), $"Expected height {source1.Height}, but got {source2.Height}.");
             }
 #endif
-            int width = source1.Width;
-            int height = source1.Height;
+            long width = source1.Width;
+            long height = source1.Height;
             TSource1* source1Buffer = source1.buffer;
             TSource2* source2Buffer = source2.buffer;
             TResult* destinationBuffer = destination.buffer;
@@ -446,8 +445,8 @@ namespace ProceduralGraph.Collections.Unsafe
                 throw new ArgumentOutOfRangeException(nameof(source2), $"Expected height {source1.Height}, but got {source2.Height}.");
             }
 #endif
-            int width = source1.Width;
-            int height = source1.Height;
+            long width = source1.Width;
+            long height = source1.Height;
             TSource1* source1Buffer = source1.buffer;
             TSource2* source2Buffer = source2.buffer;
             TResult* destinationBuffer = destination.buffer;

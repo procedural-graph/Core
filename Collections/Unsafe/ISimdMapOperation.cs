@@ -17,7 +17,7 @@ namespace ProceduralGraph.Collections.Unsafe
         /// <param name="y">The y-coordinate of the element in the vector to which the operation will be applied.</param>
         /// <param name="operand">The vector containing the source values that will be used in the operation.</param>
         /// <returns>A vector of type TResult containing the results of the applied operation at the specified coordinates.</returns>
-        Vector<TResult> Apply(int x, int y, in Vector<TSource> operand);
+        Vector<TResult> Apply(long x, long y, in Vector<TSource> operand);
     }
 
     /// <summary>
@@ -38,6 +38,6 @@ namespace ProceduralGraph.Collections.Unsafe
         /// <param name="operand1">The first vector containing source values that will be used in the operation.</param>
         /// <param name="operand2">The second vector containing source values that will be used in the operation.</param>
         /// <returns>A vector of type TResult containing the results of the applied operation at the specified coordinates.</returns>
-        Vector<TResult> Apply(int x, int y, in Vector<TSource1> operand1, in Vector<TSource2> operand2);
+        Vector<TResult> Apply(long x, long y, in Vector<TSource1> operand1, in Vector<TSource2> operand2);
     }
 }

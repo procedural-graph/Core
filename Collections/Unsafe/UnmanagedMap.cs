@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 
 namespace ProceduralGraph.Collections.Unsafe
 {
@@ -12,15 +13,15 @@ namespace ProceduralGraph.Collections.Unsafe
         /// <summary>
         /// Gets the width of the two-dimensional memory block.
         /// </summary>
-        public int Width { get; }
+        public long Width { get; }
 
         /// <summary>
         /// Gets the height of the two-dimensional memory block.
         /// </summary>
-        public int Height { get; }
+        public long Height { get; }
 
         /// <inheritdoc/>
-        public override int Length { get; }
+        public override long Length { get; }
 
         /// <summary>
         /// Gets a reference to the element at the specified two-dimensional coordinates within the buffer.
@@ -38,7 +39,7 @@ namespace ProceduralGraph.Collections.Unsafe
         /// Thrown when <paramref name="x"/> is less than 0 or greater than or equal to <see cref="Width"/>, 
         /// or when <paramref name="y"/> is less than 0 or greater than or equal to <see cref="Height"/>.
         /// </exception>
-        public unsafe ref T this[int x, int y]
+        public unsafe ref T this[long x, long y]
         {
             get
             {
@@ -51,12 +52,12 @@ namespace ProceduralGraph.Collections.Unsafe
                 }
 #endif
 
-                if (x < 0 || x > Width)
+                if (x < 0L || x > Width)
                 {
                     throw new ArgumentOutOfRangeException(nameof(x), x, null);
                 }
 
-                if (y < 0 || y > Height)
+                if (y < 0L || y > Height)
                 {
                     throw new ArgumentOutOfRangeException(nameof(y), y, null);
                 }
@@ -70,7 +71,7 @@ namespace ProceduralGraph.Collections.Unsafe
         /// </summary>
         /// <param name="width">The number of columns in the 2D memory block. Must be zero or greater.</param>
         /// <param name="height">The number of rows in the 2D memory block. Must be zero or greater.</param>
-        public unsafe UnmanagedMap(int width, int height)
+        public unsafe UnmanagedMap(long width, long height)
         {
 #if NET7_0_OR_GREATER
             ArgumentOutOfRangeException.ThrowIfNegative(width, nameof(width));
@@ -93,7 +94,7 @@ namespace ProceduralGraph.Collections.Unsafe
             buffer = UnmanagedMarshal.AllocZeroed<T>(width * height);
         }
 
-        internal unsafe UnmanagedMap(T* buffer, int width, int height)
+        internal unsafe UnmanagedMap(T* buffer, long width, long height)
         {
 #if NET7_0_OR_GREATER
             ArgumentOutOfRangeException.ThrowIfNegative(width, nameof(width));
@@ -114,6 +115,21 @@ namespace ProceduralGraph.Collections.Unsafe
 #endif
 
             this.buffer = buffer;
+        }
+
+        /// <inheritdoc/>
+        public unsafe override bool Contains(T item)
+        {
+#if NET7_0_OR_GREATER
+            ObjectDisposedException.ThrowIf(disposed, this);
+#else
+            if (disposed)
+            {
+                throw new ObjectDisposedException(nameof(UnmanagedMap<T>));
+            }
+#endif
+            EqualityComparer<T> equalityComparer = EqualityComparer<T>.Default;
+            return UnmanagedMarshal.IndexOf(buffer, Length, item, equalityComparer) != -1L;
         }
     }
 }

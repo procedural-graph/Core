@@ -83,8 +83,17 @@ namespace ProceduralGraph.Collections.Unsafe
         internal T* buffer;
 
         /// <inheritdoc cref="ICollection{T}.Count"/>
-        public abstract int Length { get; }
-        int ICollection<T>.Count => Length;
+        public abstract long Length { get; }
+        int ICollection<T>.Count
+        {
+            get
+            {
+                checked
+                {
+                    return (int)Length;
+                }
+            }
+        }
 
         bool ICollection<T>.IsReadOnly => false;
 
@@ -127,39 +136,7 @@ namespace ProceduralGraph.Collections.Unsafe
         }
 
         /// <inheritdoc/>
-        public int IndexOf(T item)
-        {
-#if NET7_0_OR_GREATER
-            ObjectDisposedException.ThrowIf(disposed, this);
-#else
-            if (disposed)
-            {
-                throw new ObjectDisposedException(GetType().FullName);
-            }
-#endif
-            EqualityComparer<T> equalityComparer = EqualityComparer<T>.Default;
-
-            T* current = buffer;
-            T* end = current + Length;
-
-            while (current < end)
-            {
-                if (equalityComparer.Equals(*current, item))
-                {
-                    return (int)(current - buffer);
-                }
-
-                current++;
-            }
-
-            return -1;
-        }
-
-        /// <inheritdoc/>
-        public bool Contains(T item)
-        {
-            return IndexOf(item) != -1;
-        }
+        public abstract bool Contains(T item);
 
         /// <inheritdoc/>
         public void CopyTo(T[] array, int arrayIndex)

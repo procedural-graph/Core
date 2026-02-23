@@ -15,7 +15,7 @@
         /// <param name="y">The y-coordinate of the target location where the operation is applied.</param>
         /// <param name="operand">The operand that influences or modifies the operation performed at the specified coordinates.</param>
         /// <returns>The result of applying the operation to the specified coordinates and operand.</returns>
-        TResult Apply(int x, int y, in TSource operand);
+        TResult Apply(long x, long y, in TSource operand);
     }
 
     /// <summary>
@@ -34,6 +34,6 @@
         /// <param name="operand1">The first operand that influences or modifies the operation performed at the specified coordinates.</param>
         /// <param name="operand2">The second operand that influences or modifies the operation performed at the specified coordinates.</param>
         /// <returns>The result of applying the operation to the specified coordinates and operands.</returns>
-        TResult Apply(int x, int y, in TSource1 operand1, in TSource2 operand2);
+        TResult Apply(long x, long y, in TSource1 operand1, in TSource2 operand2);
     }
 }
