@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace ProceduralGraph.Collections.Unsafe;
 
@@ -77,5 +78,103 @@ public sealed class UnmanagedMap<T> : UnmanagedMemory<T> where T : unmanaged
         ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
         EqualityComparer<T> equalityComparer = EqualityComparer<T>.Default;
         return UnmanagedMarshal.IndexOf(buffer, Length, item, equalityComparer) != -1L;
+    }
+
+    /// <summary>
+    /// Executes a specified operation on each element of the map in parallel. 
+    /// </summary>
+    /// <typeparam name="TOperation">The type of the operation to apply, which must implement <see cref="IMapOperation{TSource, TSource}"/>.</typeparam>
+    /// <param name="operation">The operation to apply to each element.</param>
+    /// <exception cref="ObjectDisposedException">Thrown when the map has been disposed.</exception>
+    public unsafe void ForEach<TOperation>(TOperation operation) where TOperation : struct, IMapOperation<T, T>
+    {
+        ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        long height = Height, width = Width;
+        Parallel.For(0L, height, y =>
+        {
+            T* rowOffset = buffer + (y * width);
+            for (long x = 0; x < width; x++)
+            {
+                ref T valueRef = ref *(rowOffset + x);
+                valueRef = operation.Apply(x, y, valueRef);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Executes an operation that maps elements from a source map to a destination map in parallel. 
+    /// </summary>
+    /// <typeparam name="TResult">The type of elements in the destination map.</typeparam>
+    /// <typeparam name="TOperation">The type of the mapping operation. </typeparam>
+    /// <param name="destination">The destination <see cref="UnmanagedMap{TResult}"/>.</param>
+    /// <param name="operation">The operation to apply to each source element to produce a destination element.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="destination"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">Thrown when either map has been disposed.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the dimensions of the source and destination maps do not match.</exception>
+    public unsafe void ForEach<TResult, TOperation>(
+        UnmanagedMap<TResult> destination,
+        TOperation operation)
+        where TResult : unmanaged
+        where TOperation : struct, IMapOperation<T, TResult>
+    {
+        ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(destination is null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(destination.disposed, destination, ThrowHelpers.CreateObjectDisposedException);
+        long height = Height, width = Width;
+        ThrowHelpers.ThrowIf(width != destination.Width, nameof(destination.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIf(height != destination.Height, nameof(destination.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+        TResult* destinationBuffer = destination.buffer;
+        Parallel.For(0, height, y =>
+        {
+            T* sourceRowOffset = buffer + (y * width);
+            TResult* destinationRowOffset = destinationBuffer + (y * width);
+            for (long x = 0; x < width; x++)
+            {
+                *(destinationRowOffset + x) = operation.Apply(x, y, in *(sourceRowOffset + x));
+            }
+        });
+    }
+
+    /// <summary>
+    /// Executes an operation that combines elements from two source maps into a destination map in parallel. 
+    /// </summary>
+    /// <typeparam name="TSource">The type of elements in the second source map.</typeparam>
+    /// <typeparam name="TResult">The type of elements in the destination map.</typeparam>
+    /// <typeparam name="TOperation">The type of the dual-source mapping operation. </typeparam>
+    /// <param name="source">The second source <see cref="UnmanagedMap{TSource2}"/>.</param>
+    /// <param name="destination">The destination <see cref="UnmanagedMap{TResult}"/>.</param>
+    /// <param name="operation">The operation to apply to elements from both sources.</param>
+    /// <exception cref="ArgumentNullException">Thrown when any input map is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when map dimensions are mismatched.</exception>
+    public unsafe void ForEach<TSource, TResult, TOperation>(
+        UnmanagedMap<TSource> source,
+        UnmanagedMap<TResult> destination,
+        TOperation operation)
+        where TSource : unmanaged
+        where TResult : unmanaged
+        where TOperation : struct, IMapOperation<T, TSource, TResult>
+    {
+        ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(source is null, nameof(source), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(source.disposed, source, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(destination is null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(destination.disposed, destination, ThrowHelpers.CreateObjectDisposedException);
+        long height = Height, width = Width;
+        ThrowHelpers.ThrowIf(width != source.Width, nameof(source.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIf(height != source.Height, nameof(source.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIf(width != destination.Width, nameof(destination.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIf(height != destination.Height, nameof(destination.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+        TSource* source2Buffer = source.buffer;
+        TResult* destinationBuffer = destination.buffer;
+        Parallel.For(0L, height, y =>
+        {
+            T* source1RowOffset = buffer + (y * width);
+            TSource* source2RowOffset = source2Buffer + (y * width);
+            TResult* destinationRowOffset = destinationBuffer + (y * width);
+            for (long x = 0; x < width; x++)
+            {
+                *(destinationRowOffset + x) = operation.Apply(x, y, in *(source1RowOffset + x), in *(source2RowOffset + x));
+            }
+        });
     }
 }
