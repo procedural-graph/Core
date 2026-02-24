@@ -13,7 +13,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Collections\Collections.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
-    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="9.*" />
   </ItemGroup>
   
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
