@@ -30,7 +30,7 @@ public static partial class UnmanagedMarshal
     /// <param name="width">The number of elements in each row of the 2D memory block. Must be greater than zero.</param>
     /// <param name="height">The number of rows in the 2D memory block. Must be greater than zero.</param>
     /// <returns>An instance of <see cref="UnmanagedMap{T}"/> representing the specified unmanaged 2D memory region.</returns>
-    public static unsafe UnmanagedMap<T> AsUnmanaged<T>(T* pointer, int width, int height) where T : unmanaged
+    public static unsafe UnmanagedMap<T> AsUnmanaged<T>(T* pointer, long width, long height) where T : unmanaged
     {
         return new UnmanagedMap<T>(pointer, width, height);
     }
