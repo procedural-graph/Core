@@ -73,8 +73,7 @@ public abstract class GraphEntity<TKey, TValue> :
     {
         ValueTask baseMethod = base.OnStoppingAsync(stoppingToken);
         await baseMethod.ConfigureAwait(false);
-
-        if (!_childEventHandling.IsCompletedSuccessfully)
+        if (_childEventHandling.Status != TaskStatus.RanToCompletion)
         {
             Task wait = _childEventHandling.WaitAsync(stoppingToken);
             await wait.ConfigureAwait(false);
