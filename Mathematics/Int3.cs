@@ -14,7 +14,9 @@ public unsafe struct Int3 : IVector3<Int3, int>
     , IAdditionOperators<Int3, int, Int3>,
     ISubtractionOperators<Int3, int, Int3>,
     IMultiplyOperators<Int3, int, Int3>,
-    IDivisionOperators<Int3, int, Int3>
+    IDivisionOperators<Int3, int, Int3>,
+    IUnaryPlusOperators<Int3, Int3>,
+    IUnaryNegationOperators<Int3, Int3>
 #endif
 {
     /// <inheritdoc/>
@@ -171,6 +173,18 @@ public unsafe struct Int3 : IVector3<Int3, int>
     public static Int3 operator /(Int3 left, int right)
     {
         return new Int3(left.X / right, left.Y / right, left.Z / right);
+    }
+
+    /// <inheritdoc/>
+    public static Int3 operator +(Int3 value)
+    {
+        return new Int3(+value.X, +value.Y, +value.Z);
+    }
+
+    /// <inheritdoc/>
+    public static Int3 operator -(Int3 value)
+    {
+        return new Int3(-value.X, -value.Y, -value.Z);
     }
 
     /// <summary>

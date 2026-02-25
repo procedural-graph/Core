@@ -15,7 +15,9 @@ public struct Int2 : IVector2<Int2, int>
     , IAdditionOperators<Int2, int, Int2>,
     ISubtractionOperators<Int2, int, Int2>,
     IMultiplyOperators<Int2, int, Int2>,
-    IDivisionOperators<Int2, int, Int2>
+    IDivisionOperators<Int2, int, Int2>,
+    IUnaryPlusOperators<Int2, Int2>,
+    IUnaryNegationOperators<Int2, Int2>
 #endif
 {
     /// <inheritdoc/>
@@ -169,6 +171,18 @@ public struct Int2 : IVector2<Int2, int>
     public static Int2 operator /(Int2 left, int right)
     {
         return new Int2(left.X / right, left.Y / right);
+    }
+
+    /// <inheritdoc/>
+    public static Int2 operator -(Int2 value)
+    {
+        return new Int2(-value.X, -value.Y);
+    }
+
+    /// <inheritdoc/>
+    public static Int2 operator +(Int2 value)
+    {
+        return new Int2(+value.X, +value.Y);
     }
 
     /// <summary>
