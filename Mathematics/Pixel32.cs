@@ -2,6 +2,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
 #if NET7_0_OR_GREATER
 using System.Numerics;
 #endif
@@ -12,6 +14,7 @@ namespace ProceduralGraph.Mathematics;
 /// Represents a 32-bit vector containing red, green, blue, and alpha (RGBA) color channels, each stored as an 8-bit
 /// unsigned integer.
 /// </summary>
+[StructLayout(LayoutKind.Sequential)]
 public struct Pixel32 : IVector4<Pixel32, byte>
 #if NET7_0_OR_GREATER
     , IAdditionOperators<Pixel32, Pixel32, Pixel128>,
@@ -28,8 +31,6 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     IDivisionOperators<Pixel32, float, Pixel128>
 #endif
 {
-    private const int ComponentCount = 4;
-
     /// <inheritdoc/>
     public static Pixel32 Zero => default;
 
@@ -42,16 +43,10 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     /// <inheritdoc/>
     public static Pixel32 MinValue => default;
 
-    private unsafe fixed byte _values[ComponentCount];
-
     /// <summary>
     /// Gets or sets the value of the red channel.
     /// </summary>
-    public unsafe byte Red
-    {
-        readonly get => _values[0];
-        set => _values[0] = value;
-    }
+    public byte Red { readonly get; set; }
     byte IVector4<Pixel32, byte>.X
     {
         readonly get => Red;
@@ -61,11 +56,7 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     /// <summary>
     /// Gets or sets the value of the green channel.
     /// </summary>
-    public unsafe byte Green
-    {
-        readonly get => _values[1];
-        set => _values[1] = value;
-    }
+    public byte Green { readonly get; set; }
     byte IVector4<Pixel32, byte>.Y
     {
         readonly get => Green;
@@ -75,11 +66,7 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     /// <summary>
     /// Gets or sets the value of the blue channel.
     /// </summary>
-    public unsafe byte Blue
-    {
-        readonly get => _values[2];
-        set => _values[2] = value;
-    }
+    public byte Blue { readonly get; set; }
     byte IVector4<Pixel32, byte>.Z
     {
         readonly get => Blue;
@@ -89,11 +76,7 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     /// <summary>
     /// Gets or sets the value of the alpha channel.
     /// </summary>
-    public unsafe byte Alpha
-    {
-        readonly get => _values[3];
-        set => _values[3] = value;
-    }
+    public byte Alpha { readonly get; set; }
     byte IVector4<Pixel32, byte>.W
     {
         readonly get => Alpha;
@@ -101,19 +84,25 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     }
 
     /// <inheritdoc/>
-    /// <exception cref="IndexOutOfRangeException">Thrown when <paramref name="index"/> is less than 0 or greater than 3.</exception>
-    public unsafe ref byte this[int index]
+    public byte this[int index]
     {
-        get
+        readonly get => index switch
         {
-            if ((uint)index >= ComponentCount)
+            0 => Red,
+            1 => Green,
+            2 => Blue,
+            3 => Alpha,
+            _ => throw new IndexOutOfRangeException($"Index must be in the range [0, 3].")
+        };
+        set
+        {
+            switch (index)
             {
-                throw new IndexOutOfRangeException("Index must be in the range [0, 3].");
-            }
-
-            fixed (byte* ptr = _values)
-            {
-                return ref ptr[index];
+                case 0: Red = value; break;
+                case 1: Green = value; break;
+                case 2: Blue = value; break;
+                case 3: Alpha = value; break;
+                default: throw new IndexOutOfRangeException($"Index must be in the range [0, 3].");
             }
         }
     }
@@ -125,21 +114,21 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     /// <param name="green">The value to assign to the green channel.</param>
     /// <param name="blue">The value to assign to the blue channel.</param>
     /// <param name="alpha">The value to assign to the alpha channel.</param>
-    public unsafe Pixel32(byte red, byte green, byte blue, byte alpha = byte.MaxValue)
+    public Pixel32(byte red, byte green, byte blue, byte alpha = byte.MaxValue)
     {
-        _values[0] = red;
-        _values[1] = green;
-        _values[2] = blue;
-        _values[3] = alpha;
+        Red = red;
+        Green = green;
+        Blue = blue;
+        Alpha = alpha;
     }
 
 #if NET7_0_OR_GREATER
-    private unsafe Pixel32(int red, int green, int blue, int alpha)
+    private Pixel32(int red, int green, int blue, int alpha)
     {
-        _values[0] = byte.CreateSaturating(red);
-        _values[1] = byte.CreateSaturating(green);
-        _values[2] = byte.CreateSaturating(blue);
-        _values[3] = byte.CreateSaturating(alpha);
+        Red = byte.CreateSaturating(red);
+        Green = byte.CreateSaturating(green);
+        Blue = byte.CreateSaturating(blue);
+        Alpha = byte.CreateSaturating(alpha);
     }
 #endif
 
@@ -201,19 +190,13 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override readonly string ToString()
     {
-        return ToString(null, null);
+        return ToString(null, CultureInfo.CurrentCulture);
     }
 
     /// <inheritdoc/>
-    public unsafe static Pixel32 Create(byte value)
+    public static Pixel32 Create(byte value)
     {
-        Pixel32 result = default;
-        byte* ptr = result._values;
-        ptr[0] = value;
-        ptr[1] = value;
-        ptr[2] = value;
-        ptr[3] = value;
-        return result;
+        return new Pixel32(value, value, value, value);
     }
 
     /// <inheritdoc/>

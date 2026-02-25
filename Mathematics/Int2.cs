@@ -2,13 +2,15 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace ProceduralGraph.Mathematics;
 
 /// <summary>
 /// Represents a two-dimensional vector with integer components.
 /// </summary>
-public unsafe struct Int2 : IVector2<Int2, int>
+[StructLayout(LayoutKind.Sequential)]
+public struct Int2 : IVector2<Int2, int>
 #if NET7_0_OR_GREATER
     , IAdditionOperators<Int2, int, Int2>,
     ISubtractionOperators<Int2, int, Int2>,
@@ -16,8 +18,6 @@ public unsafe struct Int2 : IVector2<Int2, int>
     IDivisionOperators<Int2, int, Int2>
 #endif
 {
-    private const int ComponentCount = 2;
-
     /// <inheritdoc/>
     public static Int2 Zero => default;
 
@@ -30,38 +30,30 @@ public unsafe struct Int2 : IVector2<Int2, int>
     /// <inheritdoc/>
     public static Int2 MinValue { get; } = Create(int.MinValue);
 
-    private fixed int _values[ComponentCount];
+    /// <inheritdoc/>
+    public int X { readonly get; set; }
 
     /// <inheritdoc/>
-    /// <exception cref="IndexOutOfRangeException">Thrown when <paramref name="index"/> is less than 0 or greater than 2.</exception>
-    public ref int this[int index]
-    {
-        get
-        {
-            if ((uint)index >= ComponentCount)
-            {
-                throw new IndexOutOfRangeException("Index must be in the range [0, 2].");
-            }
+    public int Y { readonly get; set; }
 
-            fixed (int* ptr = _values)
+    /// <inheritdoc/>
+    public int this[int index]
+    {
+        readonly get => index switch
+        {
+            0 => X,
+            1 => Y,
+            _ => throw new IndexOutOfRangeException("Index must be 0 or 1.")
+        };
+        set
+        {
+            switch (index)
             {
-                return ref ptr[index];
+                case 0: X = value; break;
+                case 1: Y = value; break;
+                default: throw new IndexOutOfRangeException("Index must be 0 or 1.");
             }
         }
-    }
-
-    /// <inheritdoc/>
-    public int X
-    {
-        readonly get => _values[0];
-        set => _values[0] = value;
-    }
-
-    /// <inheritdoc/>
-    public int Y
-    {
-        readonly get => _values[1];
-        set => _values[1] = value;
     }
 
     /// <summary>
@@ -71,8 +63,8 @@ public unsafe struct Int2 : IVector2<Int2, int>
     /// <param name="y">The value to assign to the y component.</param>
     public Int2(int x, int y)
     {
-        _values[0] = x;
-        _values[1] = y;
+        X = x;
+        Y = y;
     }
 
     /// <inheritdoc/>
@@ -110,17 +102,13 @@ public unsafe struct Int2 : IVector2<Int2, int>
     /// <inheritdoc/>
     public override readonly string ToString()
     {
-        return ToString(null, null);
+        return ToString(null, CultureInfo.CurrentCulture);
     }
 
     /// <inheritdoc/>
-    public static unsafe Int2 Create(int value)
+    public static Int2 Create(int value)
     {
-        Int2 result = default;
-        int* ptr = result._values;
-        ptr[0] = value;
-        ptr[1] = value;
-        return result;
+        return new Int2(value, value);
     }
 
     /// <inheritdoc/>

@@ -1,12 +1,14 @@
 ﻿using System;
 using System.Globalization;
 using System.Numerics;
+using System.Runtime.InteropServices;
 
 namespace ProceduralGraph.Mathematics;
 
 /// <summary>
 /// Represents a three-dimensional vector with integer X, Y, and Z components.
 /// </summary>
+[StructLayout(LayoutKind.Sequential)]
 public unsafe struct Int3 : IVector3<Int3, int>
 #if NET7_0_OR_GREATER
     , IAdditionOperators<Int3, int, Int3>,
@@ -15,39 +17,18 @@ public unsafe struct Int3 : IVector3<Int3, int>
     IDivisionOperators<Int3, int, Int3>
 #endif
 {
-    private const int ComponentCount = 3;
-
     /// <inheritdoc/>
     public static Int3 Zero => default;
 
     /// <inheritdoc/>
-    public static Int3 One { get; } = new Int3(1, 1, 1);
+    public static Int3 One { get; } = Create(1);
 
     /// <inheritdoc/>
-    public static Int3 MaxValue { get; } = new Int3(int.MaxValue, int.MaxValue, int.MaxValue);
+    public static Int3 MaxValue { get; } = Create(int.MaxValue);
 
     /// <inheritdoc/>
-    public static Int3 MinValue { get; } = new Int3(int.MinValue, int.MinValue, int.MinValue);
+    public static Int3 MinValue { get; } = Create(int.MinValue);
 
-    private fixed int _values[ComponentCount];
-
-    /// <inheritdoc/>
-    /// <exception cref="IndexOutOfRangeException">Thrown when <paramref name="index"/> is less than 0 or greater than 2.</exception>
-    public ref int this[int index]
-    {
-        get
-        {
-            if ((uint)index >= ComponentCount)
-            {
-                throw new IndexOutOfRangeException("Index must be in the range [0, 2].");
-            }
-
-            fixed (int* ptr = _values)
-            {
-                return ref ptr[index];
-            }
-        }
-    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Int3"/> structure with the specified x, y, and z component values.
@@ -63,24 +44,34 @@ public unsafe struct Int3 : IVector3<Int3, int>
     }
 
     /// <inheritdoc/>
-    public int X
-    {
-        readonly get => _values[0];
-        set => _values[0] = value;
-    }
+    public int X { readonly get; set; }
 
     /// <inheritdoc/>
-    public int Y
-    {
-        readonly get => _values[1];
-        set => _values[1] = value;
-    }
+    public int Y { readonly get; set; }
 
     /// <inheritdoc/>
-    public int Z
+    public int Z { readonly get; set; }
+
+    /// <inheritdoc/>
+    public int this[int index]
     {
-        readonly get => _values[2];
-        set => _values[2] = value;
+        readonly get => index switch
+        {
+            0 => X,
+            1 => Y,
+            2 => Z,
+            _ => throw new IndexOutOfRangeException("Index must be in the range [0, 2].")
+        };
+        set
+        {
+            switch (index)
+            {
+                case 0: X = value; break;
+                case 1: Y = value; break;
+                case 2: Z = value; break;
+                default: throw new IndexOutOfRangeException("Index must be in the range [0, 2].");
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -114,17 +105,12 @@ public unsafe struct Int3 : IVector3<Int3, int>
     }
 
     /// <inheritdoc/>
-    public override readonly string ToString() => ToString(null, null);
+    public override readonly string ToString() => ToString(null, CultureInfo.CurrentCulture);
 
     /// <inheritdoc/>
     public static Int3 Create(int value)
     {
-        Int3 result = default;
-        int* ptr = result._values;
-        ptr[0] = value;
-        ptr[1] = value;
-        ptr[2] = value;
-        return result;
+        return new Int3(value, value, value);
     }
 
     /// <inheritdoc/>

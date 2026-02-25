@@ -2,6 +2,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
 #if NET7_0_OR_GREATER
 using System.Numerics;
 #endif
@@ -12,6 +14,7 @@ namespace ProceduralGraph.Mathematics;
 /// Represents a 128-bit vector containing red, green, blue, and alpha (RGBA) color channels, each stored as an 32-bit
 /// floating point number.
 /// </summary>
+[StructLayout(LayoutKind.Sequential)]
 public struct Pixel128 : IVector4<Pixel128, float>
 #if NET7_0_OR_GREATER
     , IAdditionOperators<Pixel128, float, Pixel128>,
@@ -20,8 +23,6 @@ public struct Pixel128 : IVector4<Pixel128, float>
     IDivisionOperators<Pixel128, float, Pixel128>
 #endif
 {
-    private const int ComponentCount = 4;
-
     /// <inheritdoc/>
     public static Pixel128 Zero => default;
 
@@ -34,16 +35,10 @@ public struct Pixel128 : IVector4<Pixel128, float>
     /// <inheritdoc/>
     public static Pixel128 MinValue { get; } = Create(float.MinValue);
 
-    private unsafe fixed float _values[ComponentCount];
-
     /// <summary>
     /// Gets or sets the value of the red channel.
     /// </summary>
-    public unsafe float Red
-    {
-        readonly get => _values[0];
-        set => _values[0] = value;
-    }
+    public float Red { readonly get; set; }
     float IVector4<Pixel128, float>.X
     {
         readonly get => Red;
@@ -53,11 +48,7 @@ public struct Pixel128 : IVector4<Pixel128, float>
     /// <summary>
     /// Gets or sets the value of the green channel.
     /// </summary>
-    public unsafe float Green
-    {
-        readonly get => _values[1];
-        set => _values[1] = value;
-    }
+    public float Green { readonly get; set; }
     float IVector4<Pixel128, float>.Y
     {
         readonly get => Green;
@@ -67,11 +58,7 @@ public struct Pixel128 : IVector4<Pixel128, float>
     /// <summary>
     /// Gets or sets the value of the blue channel.
     /// </summary>
-    public unsafe float Blue
-    {
-        readonly get => _values[2];
-        set => _values[2] = value;
-    }
+    public float Blue { readonly get; set; }
     float IVector4<Pixel128, float>.Z
     {
         readonly get => Blue;
@@ -81,11 +68,7 @@ public struct Pixel128 : IVector4<Pixel128, float>
     /// <summary>
     /// Gets or sets the value of the alpha channel.
     /// </summary>
-    public unsafe float Alpha
-    {
-        readonly get => _values[3];
-        set => _values[3] = value;
-    }
+    public float Alpha { readonly get; set; }
     float IVector4<Pixel128, float>.W
     {
         readonly get => Alpha;
@@ -93,19 +76,25 @@ public struct Pixel128 : IVector4<Pixel128, float>
     }
 
     /// <inheritdoc/>
-    /// <exception cref="IndexOutOfRangeException">Thrown when <paramref name="index"/> is less than 0 or greater than 3.</exception>
-    public unsafe ref float this[int index]
+    public float this[int index]
     {
-        get
+        readonly get => index switch
         {
-            if ((uint)index >= ComponentCount)
+            0 => Red,
+            1 => Green,
+            2 => Blue,
+            3 => Alpha,
+            _ => throw new IndexOutOfRangeException("Index must be in the range [0, 3].")
+        };
+        set
+        {
+            switch (index)
             {
-                throw new IndexOutOfRangeException("Index must be in the range [0, 3].");
-            }
-
-            fixed (float* ptr = _values)
-            {
-                return ref ptr[index];
+                case 0: Red = value; break;
+                case 1: Green = value; break;
+                case 2: Blue = value; break;
+                case 3: Alpha = value; break;
+                default: throw new IndexOutOfRangeException("Index must be in the range [0, 3].");
             }
         }
     }
@@ -117,12 +106,12 @@ public struct Pixel128 : IVector4<Pixel128, float>
     /// <param name="green">The value to assign to the green channel.</param>
     /// <param name="blue">The value to assign to the blue channel.</param>
     /// <param name="alpha">The value to assign to the alpha channel.</param>
-    public unsafe Pixel128(float red, float green, float blue, float alpha)
+    public Pixel128(float red, float green, float blue, float alpha)
     {
-        _values[0] = red;
-        _values[1] = green;
-        _values[2] = blue;
-        _values[3] = alpha;
+        Red = red;
+        Green = green;
+        Blue = blue;
+        Alpha = alpha;
     }
 
     /// <summary>
@@ -169,19 +158,13 @@ public struct Pixel128 : IVector4<Pixel128, float>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override readonly string ToString()
     {
-        return ToString(null, null);
+        return ToString(null, CultureInfo.CurrentCulture);
     }
 
     /// <inheritdoc/>
     public static unsafe Pixel128 Create(float value)
     {
-        Pixel128 result = default;
-        float* ptr = result._values;
-        ptr[0] = value;
-        ptr[1] = value;
-        ptr[2] = value;
-        ptr[3] = value;
-        return result;
+        return new Pixel128(value, value, value, value);
     }
 
     /// <inheritdoc/>

@@ -40,9 +40,10 @@ public interface IVector<TSelf, TValue> : IEquatable<TSelf>, IFormattable
 #endif
 
     /// <summary>
-    /// Gets a reference to the component at the specified index.
+    /// Gets or sets the component at the specified index.
     /// </summary>
-    /// <param name="index">The zero-based index of the element to access.</param>
-    /// <returns>A reference to the component at the specified index.</returns>
-    ref TValue this[int index] { get; }
+    /// <param name="index">The zero-based index of the component to get or set.</param>
+    /// <returns>The component at the specified index.</returns>
+    /// <exception cref="IndexOutOfRangeException">Thrown when the index is outside the bounds of the collection.</exception>
+    TValue this[int index] { get; set; }
 }
