@@ -66,7 +66,7 @@ public abstract class GraphEntity<TKey, TValue> :
     /// <summary>
     /// Gets the graph this entity belongs to.
     /// </summary>
-    protected abstract IGraph Graph { get; }
+    protected abstract Graph<TKey, TValue> Graph { get; }
 
     /// <inheritdoc cref="IGraphNode.Parent"/>
     public abstract GraphEntity<TKey, TValue>? Parent { get; }
