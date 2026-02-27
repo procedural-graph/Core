@@ -227,15 +227,23 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     }
 
     /// <inheritdoc/>
-    public override void CopyTo(TItem[] array, int arrayIndex)
+    public override int CopyTo(TItem[] array, int arrayIndex)
     {
         ThrowHelpers.ThrowIf(array is null, nameof(array), ThrowHelpers.CreateArgumentNullException);
         ThrowHelpers.ThrowIf((uint)arrayIndex > array.Length, arrayIndex, ThrowHelpers.CreateArgumentOutOfRangeException);
-        using Enumerator enumerator = GetEnumerator();
-        while (arrayIndex < array.Length && enumerator.MoveNext())
+        if ((array.Length - arrayIndex) < Count)
         {
-            array[arrayIndex++] = enumerator.Current;
+            throw new ArgumentException(
+                $"The number of elements in the source collection is greater than the available space from {arrayIndex} to the end of the destination array.", 
+                nameof(array));
         }
+        using Enumerator enumerator = GetEnumerator();
+        int i = arrayIndex;
+        while (enumerator.MoveNext())
+        {
+            array[i++] = enumerator.Current;
+        }
+        return i;
     }
 
     private bool TryAdd(TItem item)

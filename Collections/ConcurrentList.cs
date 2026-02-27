@@ -190,9 +190,11 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     }
 
     /// <inheritdoc/>
-    public override void CopyTo(T[] array, int arrayIndex)
+    public override int CopyTo(T[] array, int arrayIndex)
     {
-        _items.CopyTo(array, arrayIndex);
+        ImmutableList<T> items = _items;
+        items.CopyTo(array, arrayIndex);
+        return items.Count;
     }
 
     /// <inheritdoc/>

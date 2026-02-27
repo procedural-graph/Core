@@ -70,8 +70,11 @@ public abstract partial class ConcurrentCollection<TItem, TEnumerator> : ICollec
     /// <inheritdoc/>
     public abstract bool Contains(TItem item);
 
-    /// <inheritdoc/>
-    public abstract void CopyTo(TItem[] array, int arrayIndex);
+    /// <returns>The number of items that were copied to the destination array.</returns>
+    /// <inheritdoc cref="ICollection{T}.CopyTo(T[], int)"/>
+    public abstract int CopyTo(TItem[] array, int arrayIndex);
+
+    void ICollection<TItem>.CopyTo(TItem[] array, int arrayIndex) => CopyTo(array, arrayIndex);
 
     void ICollection<TItem>.Add(TItem item)
     {
