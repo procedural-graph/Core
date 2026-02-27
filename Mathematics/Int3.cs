@@ -40,9 +40,9 @@ public unsafe struct Int3 : IVector3<Int3, int>
     /// <param name="z">The value to assign to the z component.</param>
     public Int3(int x, int y, int z)
     {
-        _values[0] = x;
-        _values[1] = y;
-        _values[2] = z;
+        X = x;
+        Y = y;
+        Z = z;
     }
 
     /// <inheritdoc/>
