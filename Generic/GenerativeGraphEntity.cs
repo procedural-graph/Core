@@ -203,7 +203,7 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
         ValueTask baseMethod = base.OnStoppingAsync(cancellationToken);
         await baseMethod.ConfigureAwait(false);
 
-        if (!_componentEventHandler.IsCompletedSuccessfully)
+        if (_componentEventHandler.Status != TaskStatus.RanToCompletion)
         {
             Task eventHandlers = _componentEventHandler.WaitAsync(cancellationToken);
             await eventHandlers.ConfigureAwait(false);
