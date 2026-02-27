@@ -16,7 +16,17 @@ public abstract partial class GraphComponent<TKey, TValue> : IGraphNode
     where TKey : struct, IEquatable<TKey>
     where TValue : class
 {
-    private static readonly ReadOnlyCollection<IGraphNode> _emptyDescendants;
+    /// <summary>
+    /// Represents an abstract model that serves as a base for derived models, providing a unique identifier for the
+    /// parent node.
+    /// </summary>
+    public abstract record Model
+    {
+        /// <summary>
+        /// Gets the unique identifier of the parent node associated with this node.
+        /// </summary>
+        public abstract Guid ParentID { get; }
+    }
 
     /// <summary>
     /// Gets the <see cref="GraphEntity{TKey, TValue}"/> associated with this component.
@@ -29,10 +39,5 @@ public abstract partial class GraphComponent<TKey, TValue> : IGraphNode
     /// </summary>
     public abstract event Action? StateChanged;
 
-    static GraphComponent()
-    {
-        _emptyDescendants = new ReadOnlyCollection<IGraphNode>(Array.Empty<IGraphNode>());
-    }
-
-    ICollection<IGraphNode> IGraphNode.Descendants => _emptyDescendants;
+    ICollection<IGraphNode> IGraphNode.Descendants => [];
 }

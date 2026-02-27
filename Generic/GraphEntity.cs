@@ -20,6 +20,44 @@ public abstract class GraphEntity<TKey, TValue> :
     where TKey : struct, IEquatable<TKey>
     where TValue : class
 {
+    internal sealed class Comparer : IComparer<GraphEntity<TKey, TValue>>
+    {
+        public int Compare(GraphEntity<TKey, TValue>? x, GraphEntity<TKey, TValue>? y)
+        {
+            return Comparer<Guid?>.Default.Compare(x?.ID, y?.ID);
+        }
+    }
+
+    /// <summary>
+    /// Represents the base type for all entity models in a graph structure.
+    /// </summary>
+    public abstract record Model : GraphComponent<TKey, TValue>.Model
+    {
+        /// <summary>
+        /// Gets the unique identifier of the entity associated with this model.
+        /// </summary>
+        public abstract Guid ID { get; }
+
+        /// <summary>
+        /// Attempts to retrieve the unique identifier of the scene member associated with this graph entity model.
+        /// </summary>
+        /// <param name="id">
+        /// When the method returns <see langword="true"/>, contains the identifier of the scene member; otherwise,
+        /// contains the default value for <typeparamref name="TKey"/>.
+        /// </param>
+        /// <returns>
+        /// <see langword="true"/> if this model has an associated scene member identifier; 
+        /// otherwise, <see langword="false"/>.
+        /// </returns>
+        public virtual bool TryGetSceneMemberIdentity(out TKey id)
+        {
+            id = default;
+            return false;
+        }
+    }
+
+    internal static readonly Comparer comparer = new();
+
     /// <summary>
     /// Gets the unique identifier for this graph entity.
     /// </summary>

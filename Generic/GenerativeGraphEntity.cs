@@ -170,7 +170,7 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
     /// <summary>
     /// Gets the collection of components associated with this graph entity.
     /// </summary>
-    public ICollection<GraphComponent<TKey, TValue>> Components => _components!;
+    public ConcurrentList<GraphComponent<TKey, TValue>> Components => _components!;
 
     private Task _componentEventHandler = Task.CompletedTask;
 

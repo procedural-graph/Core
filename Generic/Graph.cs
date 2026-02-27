@@ -1,10 +1,12 @@
-﻿using System;
+﻿using ProceduralGraph.Collections;
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -152,7 +154,7 @@ public abstract class Graph<TKey, TValue> :
     {
         CancellationToken stoppingToken = rootEntity.StoppingToken;
         TValue parentSceneMember = SceneMemberInfoProvider.GetParent(sceneMember)!;
-        using var enumerator = new BreadthFirstGraphTraverser<TKey, TValue>(rootEntity);
+        using BreadthFirstTraversalEnumerator<TKey, TValue> enumerator = new(rootEntity);
         while (enumerator.MoveNext())
         {
             stoppingToken.ThrowIfCancellationRequested();
@@ -225,7 +227,7 @@ public abstract class Graph<TKey, TValue> :
         TValue? parent = SceneMemberInfoProvider.GetParent(sceneMember);
         TKey parentKey = parent is { } ? SceneMemberInfoProvider.GetKey(parent) : default;
 
-        using var enumerator = new BreadthFirstGraphTraverser<TKey, TValue>(rootEntity);
+        using BreadthFirstTraversalEnumerator<TKey, TValue> enumerator = new(rootEntity);
         while (enumerator.MoveNext())
         {
             GraphEntity<TKey, TValue> current = enumerator.Current;
@@ -274,6 +276,275 @@ public abstract class Graph<TKey, TValue> :
     public bool TryGetValue(TValue key, [NotNullWhen(true)] out GraphEntity<TKey, TValue>? value)
     {
         return _roots!.TryGetValue(key, out value);
+    }
+
+    /// <summary>
+    /// Constructs a hierarchy of graph entities starting from the specified root entity and using the provided child models.
+    /// </summary>
+    /// <param name="root">
+    /// The root graph entity from which to begin loading the graph structure. This parameter must not be 
+    /// <see langword="null"/>.
+    /// </param>
+    /// <param name="children">
+    /// A <see cref="ReadOnlySpan{T}"/> containing the child models that represent components of the graph. Each model must 
+    /// specify a valid parent identifier.
+    /// </param>
+    /// <returns>
+    /// A <see cref="HashSet{T}"/> containing the scene members that were entitized and loaded from the provided models. 
+    /// The set will be empty if no scene members are found.
+    /// </returns>
+    /// <exception cref="ArgumentNullException">Thrown if <paramref name="root"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown if a converter cannot be found for a model, if a model's parent cannot be resolved, or if a required
+    /// scene member cannot be found.
+    /// </exception>
+    public HashSet<TValue> ConstructHierarchy(GraphEntity<TKey, TValue> root, ReadOnlySpan<GraphComponent<TKey, TValue>.Model> children)
+    {
+#if NET7_0_OR_GREATER
+        ArgumentNullException.ThrowIfNull(root);
+#else
+        if (root is null)
+        {
+            throw new ArgumentNullException(nameof(root));
+        }
+#endif
+
+        IGraphConverterProvider converters = Converters;
+        ISceneMemberInfoProvider<TKey, TValue> sceneMemberInfoProvider = SceneMemberInfoProvider;
+
+        HashSet<TValue> createdSceneMembers = [];
+        Dictionary<Guid, IGraphNode> nodes = new(8)
+        {
+            { root.ID, root }
+        };
+
+        for (int i = 0; i < children.Length; i++)
+        {
+            GraphComponent<TKey, TValue>.Model model = children[i];
+
+            if (!converters.TryFind(model, out IGraphConverter? converter))
+            {
+                throw new InvalidOperationException($"No converter found for {model}.");
+            }
+
+            if (!nodes.TryGetValue(model.ParentID, out IGraphNode? parent))
+            {
+                throw new InvalidOperationException($"Unable to resolve parent for {model}.");
+            }
+
+            IGraphNode? node;
+            if (model is not GraphEntity<TKey, TValue>.Model entityModel || !entityModel.TryGetSceneMemberIdentity(out TKey sceneMemberID))
+            {
+                node = converter.ToGraph(model, this, parent);
+            }
+            else
+            {
+                if (sceneMemberInfoProvider.TryFind(sceneMemberID, out TValue? sceneMember))
+                {
+                    createdSceneMembers.Add(sceneMember);
+                    node = converter.ToGraph(sceneMember, this, entityModel, parent);
+                }
+                else
+                {
+                    throw new InvalidOperationException($"Unable to find scene member for {entityModel}.");
+                }
+            }
+
+            parent.Descendants.Add(node);
+
+            if (node is GraphEntity<TKey, TValue> entity)
+            {
+                nodes.Add(entity.ID, entity);
+            }
+        }
+
+        return createdSceneMembers;
+    }
+
+    /// <summary>
+    /// Constructs a hierarchy of graph nodes starting from the specified root node and adds associated scene members to
+    /// the provided collection.
+    /// </summary>
+    /// <typeparam name="TEntity">
+    /// Specifies the type of the root entity, which must implement both the <see cref="IGraphNode"/> and
+    /// <see cref="IProxyGraphNode{T}"/> interfaces.
+    /// </typeparam>
+    /// <param name="root">
+    /// The root entity from which the hierarchy construction begins. 
+    /// Must not be <see langword="null"/>.
+    /// </param>
+    /// <param name="createdSceneMembers">
+    /// A collection used to track scene members that have already been created, preventing duplicates during hierarchy
+    /// construction. Must not be <see langword="null"/>.
+    /// .</param>
+    public void ConstructHierarchy<TEntity>(TEntity root, HashSet<TValue> createdSceneMembers) where TEntity : IGraphNode, IProxyGraphNode<TValue>
+    {
+        ISceneMemberInfoProvider<TKey, TValue> sceneMemberInfoProvider = SceneMemberInfoProvider;
+        IGraphConverterProvider converterProvider = Converters;
+        Stack<KeyValuePair<IGraphNode, TValue>> stack = [];
+        KeyValuePair<IGraphNode, TValue> current = new(root, root.SceneMember);
+        do
+        {
+            if (createdSceneMembers.Add(current.Value))
+            {
+                if (!converterProvider.TryFind(current.Value, out IGraphConverter? converter))
+                {
+                    continue;
+                }
+
+                IGraphNode? graphNode = converter.ToGraph(current.Value, this, current.Key);
+                current.Key.Descendants.Add(graphNode);
+            }
+
+            IReadOnlyCollection<TValue> collection = sceneMemberInfoProvider.GetChildren(current.Value);
+            switch (collection)
+            {
+                case TValue[] array: PushChildren(current.Key, stack, array); break;
+                case List<TValue> list: PushChildren(current.Key, stack, list); break;
+                default: PushChildren(current.Key, stack, collection); break;
+            }
+        }
+        while (stack.TryPop(out current));
+    }
+
+    private static void PushChildren(IGraphNode node, Stack<KeyValuePair<IGraphNode, TValue>> stack, TValue[] array)
+    {
+        int length = array.Length;
+        if (length == 0)
+        {
+            return;
+        }
+#if NET6_0_OR_GREATER
+        stack.EnsureCapacity(stack.Count + length);
+#endif
+        for (int i = 0; i < length; i++)
+        {
+            KeyValuePair<IGraphNode, TValue> item = new(node, array[i]);
+            stack.Push(item);
+        }
+    }
+
+    private static void PushChildren(IGraphNode node, Stack<KeyValuePair<IGraphNode, TValue>> stack, List<TValue> list)
+    {
+        int count = list.Count;
+        if (count == 0)
+        {
+            return;
+        }
+#if NET6_0_OR_GREATER
+        stack.EnsureCapacity(stack.Count + count);
+#endif
+        using List<TValue>.Enumerator enumerator = list.GetEnumerator();
+        while (enumerator.MoveNext())
+        {
+            KeyValuePair<IGraphNode, TValue> item = new(node, enumerator.Current);
+            stack.Push(item);
+        }
+    }
+
+    private static void PushChildren(IGraphNode node, Stack<KeyValuePair<IGraphNode, TValue>> stack, IReadOnlyCollection<TValue> collection)
+    {
+        int count = collection.Count;
+        if (count == 0)
+        {
+            return;
+        }
+#if NET6_0_OR_GREATER
+        stack.EnsureCapacity(stack.Count + count);
+#endif
+        foreach (TValue item in collection)
+        {
+            KeyValuePair<IGraphNode, TValue> pair = new(node, item);
+            stack.Push(pair);
+        }
+    }
+
+    /// <summary>
+    /// Collapses the hierarchy of the specified graph entity into a flat list of models.
+    /// </summary>
+    /// <param name="entity">The graph entity to collapse. This parameter cannot be null.</param>
+    /// <returns>A list of objects representing the collapsed models derived from the hierarchy of the specified graph entity.</returns>
+    public List<object> CollapseHierarchy(GraphEntity<TKey, TValue> entity)
+    {
+#if NET7_0_OR_GREATER
+        ArgumentNullException.ThrowIfNull(entity);
+#else
+        if (entity is null)
+        {
+            throw new ArgumentNullException(nameof(entity));
+        }
+#endif
+
+        List<object> models = [];
+
+        using DepthFirstGraphTraverser<TKey, TValue> traverser = new(entity);
+        while (traverser.MoveNext())
+        {
+            GraphEntity<TKey, TValue> current = traverser.Current;
+
+            if (current is GenerativeGraphEntity<TKey, TValue> generativeGraphEntity)
+            {
+                CollapseComponents(generativeGraphEntity, models);
+            }
+
+            CollapseChildren(current, models);
+        }
+
+        return models;
+    }
+
+    private void CollapseComponents(GenerativeGraphEntity<TKey, TValue> generativeGraphEntity, List<object> models)
+    {
+        ConcurrentList<GraphComponent<TKey, TValue>> components = generativeGraphEntity.Components;
+        int componentCount = components.Count;
+
+        if (componentCount == 0)
+        {
+            return;
+        }
+
+#if NET6_0_OR_GREATER
+        models.EnsureCapacity(models.Count + componentCount);
+#endif
+
+        IGraphConverterProvider converters = Converters;
+        using ImmutableList<GraphComponent<TKey, TValue>>.Enumerator enumerator = components.GetEnumerator();
+        while (enumerator.MoveNext())
+        {
+            ConvertAndAdd(models, converters, enumerator.Current, this);
+        }
+    }
+
+    private void CollapseChildren(GraphEntity<TKey, TValue> entity, List<object> models)
+    {
+        ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> children = entity.Children;
+        int childCount = children.Count;
+
+        if (childCount == 0)
+        {
+            return;
+        }
+
+#if NET6_0_OR_GREATER
+        models.EnsureCapacity(models.Count + childCount);
+#endif
+
+        IGraphConverterProvider converters = Converters;
+        using ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator enumerator = children.GetEnumerator();
+        while (enumerator.MoveNext())
+        {
+            ConvertAndAdd(models, converters, enumerator.Current, this);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ConvertAndAdd<T>(List<object> models, IGraphConverterProvider converters, T node, Graph<TKey, TValue> graph) where T : IGraphNode
+    {
+        if (converters.TryFind(node, out IGraphConverter? converter))
+        {
+            object model = converter.ToModel(node, graph);
+            models.Add(model);
+        }
     }
 
     /// <inheritdoc/>
