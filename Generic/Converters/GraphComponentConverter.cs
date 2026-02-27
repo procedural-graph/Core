@@ -15,7 +15,7 @@ namespace ProceduralGraph.Generic.Converters;
 /// <see cref="IEquatable{TKey}"/>.
 /// </typeparam>
 /// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TValue, TKey> : GraphNodeSerializer<TComponent, TModel>, IGraphConverter
+public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TValue, TKey> : GraphNodeSerializer<TKey, TValue, TComponent, TModel>, IGraphConverter
     where TComponent : GraphComponent<TKey, TValue>
     where TModel : class
     where TEntity : LifecycleGraphNode<TKey, TValue>
@@ -33,17 +33,14 @@ public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TValu
     /// The <typeparamref name="TModel"/> to convert to an <typeparamref name="TComponent"/>. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    /// <param name="host">
-    /// The asynchronous lifecycle host that manages the entity's lifecycle. 
-    /// Cannot be <see langword="null"/>.
-    /// </param>
+    /// <param name="graph">The Procedural Graph instance that the node belongs to. Cannot be <see langword="null"/>.</param>
     /// <param name="entity">
     /// The parent entity to associate with the new component.
     /// </param>
     /// <returns>The entity representation of the specified model.</returns>
-    protected abstract IGraphNode ToComponent(TModel model, IAsyncLifecycle host, TEntity entity);
+    protected abstract IGraphNode ToComponent(TModel model, Graph<TKey, TValue> graph, TEntity entity);
 
-    IGraphNode IGraphConverter.ToGraph(object obj, IGraph root, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object obj, IGraph graph, IGraphNode? parent)
     {
 #if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(parent, nameof(parent));
@@ -55,7 +52,8 @@ public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TValu
 #endif
         TEntity typedEntity = parent as TEntity ?? throw new ArgumentException($"Must be of type {typeof(TEntity)}.", nameof(parent));
         TModel typedModel = obj as TModel ?? throw new ArgumentException($"Must be of type {typeof(TModel)}.", nameof(obj));
-        return ToComponent(typedModel, root, typedEntity);
+        Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
+        return ToComponent(typedModel, typedGraph, typedEntity);
     }
 
     IGraphNode IGraphConverter.ToGraph(object sceneMember, IGraph root, object model, IGraphNode? parent)

@@ -284,11 +284,21 @@ public sealed class GraphConverterRegistrar : ICollection<IGraphConverter>
         Dictionary<Type, HashSet<IGraphConverter>>.Enumerator enumerator = _convertersByType.GetEnumerator();
         while (enumerator.MoveNext())
         {
+#if NETFRAMEWORK
+            Type type = enumerator.Current.Key;
+            HashSet<IGraphConverter> converters = enumerator.Current.Value;
+#else
             (Type type, HashSet<IGraphConverter> converters) = enumerator.Current;
+#endif
             int count = converters.Count;
             converters.CopyTo(allConverters, index);
             Array.Sort(allConverters, index, count);
+#if NETFRAMEWORK
+            (int offset, int length) = ranges[index].GetOffsetAndLength(allConverters.Length);
+            convertersByType.Add(type, allConverters.AsMemory(offset, length));
+#else
             convertersByType.Add(type, allConverters.AsMemory(ranges[index]));
+#endif
             index += count;
         }
         return index;

@@ -19,7 +19,7 @@ public abstract class SerializedGraphEntityConverter<TEntity, TModel, TKey, TVal
     where TEntity : LifecycleGraphNode<TKey, TValue>
     where TKey : struct, IEquatable<TKey>
     where TValue : class
-    where TModel : notnull
+    where TModel : class
 {
     private static readonly ImmutableArray<Type> _supportedTypes = [typeof(TEntity), typeof(TModel)];
     /// <inheritdoc/>
@@ -31,10 +31,6 @@ public abstract class SerializedGraphEntityConverter<TEntity, TModel, TKey, TVal
         return obj is TEntity || obj is TModel;
     }
 
-    IGraphNode IGraphConverter.ToGraph(object obj, IGraph root, IGraphNode? parent) => ToEntity((TModel)obj, root, parent);
-
-    object IGraphConverter.ToModel(IGraphNode node, IGraph root) => ToModel((TEntity)node, root);
-
     /// <summary>
     /// Converts the specified <typeparamref name="TModel"/> to it's corresponding <typeparamref name="TEntity"/> representation.
     /// </summary>
@@ -42,16 +38,13 @@ public abstract class SerializedGraphEntityConverter<TEntity, TModel, TKey, TVal
     /// The <typeparamref name="TModel"/> to convert to an <typeparamref name="TEntity"/>. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    /// <param name="root">
-    /// The asynchronous lifecycle host that manages the entity's lifecycle. 
-    /// Cannot be <see langword="null"/>.
-    /// </param>
+    /// <param name="graph">The Procedural Graph instance that the node belongs to. Cannot be <see langword="null"/>.</param>
     /// <param name="parent">
     /// The parent graph node to associate with the new entity, 
     /// or <see langword="null"/> if the entity has no parent.
     /// </param>
     /// <returns>The entity representation of the specified model.</returns>
-    protected abstract TEntity ToEntity(TModel model, IGraph root, IGraphNode? parent = null);
+    protected abstract TEntity ToEntity(TModel model, Graph<TKey, TValue> graph, IGraphNode? parent = null);
 
     /// <summary>
     /// Converts the specified <typeparamref name="TEntity"/> to it's corresponding <typeparamref name="TModel"/> representation.
@@ -60,10 +53,21 @@ public abstract class SerializedGraphEntityConverter<TEntity, TModel, TKey, TVal
     /// The <typeparamref name="TEntity"/> to convert to an <typeparamref name="TModel"/>. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    /// <param name="root">
-    /// The asynchronous lifecycle host that manages the entity's lifecycle. 
-    /// Cannot be <see langword="null"/>.
-    /// </param>
+    /// <param name="graph">The Procedural Graph instance that the node belongs to. Cannot be <see langword="null"/>.</param>
     /// <returns>The model representation of the specified entity node.</returns>
-    protected abstract TModel ToModel(TEntity node, IGraph root);
+    protected abstract TModel ToModel(TEntity node, Graph<TKey, TValue> graph);
+
+    IGraphNode IGraphConverter.ToGraph(object obj, IGraph graph, IGraphNode? parent)
+    {
+        Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
+        TModel typedModel = obj as TModel ?? throw new ArgumentException($"Must be of type {typeof(TModel)}.", nameof(obj));
+        return ToEntity(typedModel, typedGraph, parent);
+    }
+
+    object IGraphConverter.ToModel(IGraphNode node, IGraph graph)
+    {
+        Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
+        TEntity typedNode = node as TEntity ?? throw new ArgumentException($"Must be of type {typeof(TEntity)}.", nameof(node));
+        return ToModel(typedNode, typedGraph);
+    }
 }
