@@ -8,23 +8,28 @@ namespace ProceduralGraph.Collections.Unsafe;
 /// Represents a fixed-size, indexable collection of unmanaged elements allocated in unmanaged memory.
 /// </summary>
 /// <inheritdoc/>
-public sealed class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, ICloneable, IStructuralEquatable, IStructuralComparable where T : unmanaged
+public abstract class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, IStructuralEquatable, IStructuralComparable where T : unmanaged
 {
-    /// <inheritdoc/>
-    public override long Length { get; }
-
     /// <summary>
-    /// Gets a reference to the element at the specified index.
+    /// Gets or sets an element at the specified index.
     /// </summary>
     /// <param name="index">The zero-based index of the element to retrieve. Must be within the valid range of the collection.</param>
-    /// <returns>A reference to the element at the specified index.</returns>
-    public unsafe ref T this[long index]
+    /// <returns>The element at the specified index.</returns>
+    public unsafe T this[long index]
     {
         get
         {
-            ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
+            ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
             ThrowHelpers.ThrowIf((ulong)index < (ulong)Length, index, ThrowHelpers.CreateArgumentOutOfRangeException);
-            return ref *(buffer + index);
+            using SafeHandle.Scope scope = Handle.GetScoped();
+            return *((T*)scope + index);
+        }
+        set
+        {
+            ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+            ThrowHelpers.ThrowIf((ulong)index < (ulong)Length, index, ThrowHelpers.CreateArgumentOutOfRangeException);
+            using SafeHandle.Scope scope = Handle.GetScoped();
+            *((T*)scope + index) = value;
         }
     }
 
@@ -34,31 +39,25 @@ public sealed class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, ICloneable
         set => this[index] = value;
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="UnmanagedMemory{T}"/> class that allocates a zero-initialized buffer for the
-    /// specified number of elements.
-    /// </summary>
-    /// <param name="elementCount">The number of elements to allocate in unmanaged memory. Must be zero or greater.</param>
-    public unsafe UnmanagedArray(long elementCount)
-    {
-        ThrowHelpers.ThrowIf(elementCount < 0L, elementCount, ThrowHelpers.CreateArgumentOutOfRangeException);
-        Length = elementCount;
-        buffer = UnmanagedMarshal.AllocZeroed<T>(elementCount);
-    }
-
-    internal unsafe UnmanagedArray(T* buffer, long elementCount)
-    {
-        ThrowHelpers.ThrowIf(elementCount < 0L, elementCount, ThrowHelpers.CreateArgumentOutOfRangeException);
-        Length = elementCount;
-        this.buffer = buffer;
-    }
-
     /// <inheritdoc cref="IList{T}.IndexOf"/>
     public unsafe long IndexOf(T item)
     {
-        ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+
         EqualityComparer<T> equalityComparer = EqualityComparer<T>.Default;
-        return UnmanagedMarshal.IndexOf(buffer, Length, item, equalityComparer);
+
+        using SafeHandle.Scope scope = Handle.GetScoped();
+        T* ptr = (T*)scope;
+
+        for (long i = 0; i < Length; i++)
+        {
+            if (equalityComparer.Equals(ptr[i], item))
+            {
+                return i;
+            }
+        }
+
+        return -1L;
     }
 
     /// <inheritdoc/>
@@ -67,21 +66,10 @@ public sealed class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, ICloneable
         return IndexOf(item) != -1L;
     }
 
-    /// <inheritdoc cref="ICloneable.Clone"/>
-    public unsafe UnmanagedMemory<T> Clone()
-    {
-        ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
-
-        T* newBuffer = UnmanagedMarshal.Alloc<T>(Length);
-        UnmanagedMarshal.Copy(buffer, newBuffer, Length);
-
-        return new UnmanagedArray<T>(newBuffer, Length);
-    }
-
     /// <inheritdoc cref="IStructuralEquatable.Equals(object?, IEqualityComparer)"/>
     public bool Equals(IEnumerable<T> other, IEqualityComparer<T> comparer)
     {
-        ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
         ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
 
         if (other is null || (TryGetNonEnumeratedCount(other, out long otherCount) && otherCount != Length))
@@ -105,7 +93,7 @@ public sealed class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, ICloneable
     /// <inheritdoc cref="IStructuralEquatable.GetHashCode(IEqualityComparer)"/>
     public int GetHashCode(IEqualityComparer<T> comparer)
     {
-        ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
         ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
 
         var hash = new HashCode();
@@ -120,7 +108,7 @@ public sealed class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, ICloneable
     /// <inheritdoc cref="IStructuralComparable.CompareTo(object?, IComparer)"/>
     public int CompareTo(IEnumerable<T>? other, IComparer<T> comparer)
     {
-        ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
         ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
 
         if (other is null)
@@ -168,8 +156,8 @@ public sealed class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, ICloneable
     {
         switch (other)
         {
-            case UnmanagedMemory<T> unmanagedMemory:
-                length = unmanagedMemory.Length;
+            case IBigCollection<T> collection:
+                length = collection.Count;
                 return true;
             case ICollection<T> collection:
                 length = collection.Count;
@@ -193,15 +181,7 @@ public sealed class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, ICloneable
         throw new NotSupportedException("Cannot remove items from a fixed-size collection.");
     }
 
-    int IList<T>.IndexOf(T item)
-    {
-        checked
-        {
-            return (int)IndexOf(item);
-        }
-    }
-
-    object ICloneable.Clone() => Clone();
+    int IList<T>.IndexOf(T item) => checked((int)IndexOf(item));
 
     bool IStructuralEquatable.Equals(object? other, IEqualityComparer comparer)
     {

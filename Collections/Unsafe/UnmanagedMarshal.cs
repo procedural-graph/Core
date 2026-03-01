@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 
 namespace ProceduralGraph.Collections.Unsafe;
 
@@ -41,7 +42,7 @@ public static partial class UnmanagedMarshal
     /// <typeparam name="T">The type of elements stored in the unmanaged memory. Must be an unmanaged type.</typeparam>
     /// <param name="memory">The unmanaged memory block from which to obtain the pointer.</param>
     /// <returns>A pointer to the first element of the unmanaged memory block represented by <paramref name="memory"/>.</returns>
-    public static unsafe T* AsPointer<T>(UnmanagedMemory<T> memory) where T : unmanaged
+    public static unsafe T* AsPointer<T>(UniqueUnmanagedMemory<T> memory) where T : unmanaged
     {
         ThrowHelpers.ThrowIf(memory.disposed, memory, ThrowHelpers.CreateObjectDisposedException);
         return memory.buffer;
@@ -51,22 +52,17 @@ public static partial class UnmanagedMarshal
     /// Allocates a block of unmanaged memory for an array of the specified type and
     /// initializes all bytes to zero.
     /// </summary>
-    /// <typeparam name="T">The type of elements to allocate. Must be an unmanaged type.</typeparam>
-    /// <param name="elementCount">The number of elements to allocate. Must be greater than zero.</param>
-    /// <returns>
-    /// A pointer to the allocated memory block containing zero-initialized elements
-    /// of type <typeparamref name="T"/>.
-    /// </returns>
+    /// <inheritdoc cref="Alloc{T}(long, out long)"/>
 #if NET6_0_OR_GREATER
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe T* AllocZeroed<T>(long elementCount) where T : unmanaged
+    public static unsafe T* AllocZeroed<T>(long elementCount, out long byteCount) where T : unmanaged
     {
-        return Alloc<T>(&NativeMemory.AllocZeroed, elementCount);
+        return Alloc<T>(&NativeMemory.AllocZeroed, elementCount, out byteCount);
     }
 #else
-    public static unsafe T* AllocZeroed<T>(long elementCount) where T : unmanaged
+    public static unsafe T* AllocZeroed<T>(long elementCount, out long byteCount) where T : unmanaged
     {
-        void* ptr = Alloc(elementCount, sizeof(T), out long byteCount);
+        void* ptr = Alloc(elementCount, sizeof(T), out byteCount);
         Buffer.MemoryCopy(null, ptr, byteCount, 0);
         return (T*)ptr;
     }
@@ -78,26 +74,30 @@ public static partial class UnmanagedMarshal
     /// </summary>
     /// <typeparam name="T">The type of elements to allocate. Must be an unmanaged type.</typeparam>
     /// <param name="elementCount">The number of elements to allocate. Must be greater than zero.</param>
-    /// <returns>A pointer to the allocated block of unmanaged memory containing the specified number of elements.</returns>
+    /// <param name="byteCount">When this method returns, contains the total number of bytes allocated for the unmanaged memory block.</param>
+    /// <returns>
+    /// A pointer to the allocated memory block containing zero-initialized elements
+    /// of type <typeparamref name="T"/>.
+    /// </returns>
 #if NET6_0_OR_GREATER
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static unsafe T* Alloc<T>(long elementCount) where T : unmanaged
+    public static unsafe T* Alloc<T>(long elementCount, out long byteCount) where T : unmanaged
     {
-        return Alloc<T>(&NativeMemory.Alloc, elementCount);
+        return Alloc<T>(&NativeMemory.Alloc, elementCount, out byteCount);
     }
 #else
-    public static unsafe T* Alloc<T>(long elementCount) where T : unmanaged
+    public static unsafe T* Alloc<T>(long elementCount, out long byteCount) where T : unmanaged
     {
-        void* ptr = Alloc(elementCount, sizeof(T), out _);
+        void* ptr = Alloc(elementCount, sizeof(T), out byteCount);
         return (T*)ptr;
     }
 #endif
 
 #if NET6_0_OR_GREATER
-    private static unsafe T* Alloc<T>(delegate*<nuint, void*> funcPtr, long elementCount) where T : unmanaged
+    private static unsafe T* Alloc<T>(delegate*<nuint, void*> funcPtr, long elementCount, out long byteCount) where T : unmanaged
     {
         ArgumentOutOfRangeException.ThrowIfNegative(elementCount, nameof(elementCount));
-        long byteCount = elementCount * sizeof(T);
+        byteCount = elementCount * sizeof(T);
         T* ptr = (T*)funcPtr((nuint)byteCount);
         GC.AddMemoryPressure(byteCount);
         return ptr;
@@ -114,24 +114,57 @@ public static partial class UnmanagedMarshal
 #endif
 
     /// <summary>
-    /// Releases the unmanaged memory allocated for a specified number of <typeparamref name="T"/> elements.
+    /// Frees a block of memory.
     /// </summary>
     /// <typeparam name="T">The type of elements in the buffer. Must be an unmanaged type.</typeparam>
-    /// <param name="buffer">A pointer to the memory buffer containing the elements to be freed. Must not be null.</param>
+    /// <param name="buffer">
+    /// A pointer to the memory buffer containing the elements to be freed. 
+    /// Must not be <see langword="null"/>.
+    /// </param>
     /// <param name="elementCount">The number of elements in the buffer. Must be greater than zero.</param>
 #if NET6_0_OR_GREATER
     public static unsafe void Free<T>(T* buffer, long elementCount) where T : unmanaged
     {
-        ArgumentNullException.ThrowIfNull(buffer, nameof(buffer));
-        NativeMemory.Free(buffer);
+        Free(buffer);
         GC.RemoveMemoryPressure(elementCount * sizeof(T));
     }
 #else
     public static unsafe void Free<T>(T* buffer, long elementCount) where T : unmanaged
     {
+        Free(buffer);
+        GC.RemoveMemoryPressure(elementCount * sizeof(T));
+    }
+#endif
+
+    /// <inheritdoc cref="Free{T}(T*, long)"/>
+    /// <param name="buffer"/>
+    /// <param name="byteCount">The number of bytes in the buffer. Must be greater than zero.</param>
+#if NET6_0_OR_GREATER
+    public static unsafe void Free(void* buffer, long byteCount)
+    {
+        Free(buffer);
+        GC.RemoveMemoryPressure(byteCount);
+    }
+#else
+    public static unsafe void Free(void* buffer, long byteCount)
+    {
+        Free(buffer);
+        GC.RemoveMemoryPressure(byteCount);
+    }
+#endif
+
+    /// <inheritdoc cref="Free{T}(T*, long)"/>
+#if NET6_0_OR_GREATER
+    public static unsafe void Free(void* buffer)
+    {
+        ArgumentNullException.ThrowIfNull(buffer, nameof(buffer));
+        NativeMemory.Free(buffer);
+    }
+#else
+    public static unsafe void Free(void* buffer)
+    {
         ThrowHelpers.ThrowIf(buffer == null, nameof(buffer), ThrowHelpers.CreateArgumentNullException);
         Marshal.FreeHGlobal((IntPtr)buffer);
-        GC.RemoveMemoryPressure(elementCount * sizeof(T));
     }
 #endif
 
@@ -177,6 +210,37 @@ public static partial class UnmanagedMarshal
         ThrowHelpers.ThrowIf(destination == null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
         long size = sizeof(T) * elementCount;
         Buffer.MemoryCopy(source, destination, size, size);
+    }
+#endif
+
+    /// <summary>
+    /// Copies a specified number of elements from a source memory location to a destination memory location.
+    /// </summary>
+    /// <typeparam name="T">The type of elements to copy. Must be an unmanaged type.</typeparam>
+    /// <param name="source">A pointer to the source memory location from which elements are copied. Cannot be null.</param>
+    /// <param name="destination">A pointer to the destination memory location where elements are copied. Cannot be null.</param>
+    /// <param name="byteCount">The number of bytes to copy from the source to the destination. Must be a non-negative integer.</param>
+#if NET6_0_OR_GREATER
+    public static unsafe void Copy(void* source, void* destination, long byteCount)
+    {
+        ArgumentNullException.ThrowIfNull(source, nameof(source));
+        ArgumentNullException.ThrowIfNull(destination, nameof(destination));
+        try
+        {
+            NativeMemory.Copy(source, destination, nuint.CreateChecked(byteCount));
+        }
+        catch (OverflowException) when (byteCount < 0L)
+        {
+            throw new ArgumentOutOfRangeException(nameof(byteCount), byteCount, null);
+        }
+    }
+#else
+    public static unsafe void Copy(void* source, void* destination, long byteCount)
+    {
+        ThrowHelpers.ThrowIf(source == null, nameof(source), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(destination == null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(byteCount < 0, byteCount, ThrowHelpers.CreateArgumentOutOfRangeException);
+        Buffer.MemoryCopy(source, destination, byteCount, byteCount);
     }
 #endif
 

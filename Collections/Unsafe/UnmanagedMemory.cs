@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 
 namespace ProceduralGraph.Collections.Unsafe;
 
@@ -10,7 +11,7 @@ namespace ProceduralGraph.Collections.Unsafe;
 /// buffer.
 /// </summary>
 /// <typeparam name="T">The unmanaged value type of elements stored in the memory region.</typeparam>
-public abstract unsafe class UnmanagedMemory<T> : ICollection<T>, IEquatable<UnmanagedMemory<T>>, IDisposable where T : unmanaged
+public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable where T : unmanaged
 {
     /// <summary>
     /// Enumerates the elements of a contiguous memory region.
@@ -19,27 +20,29 @@ public abstract unsafe class UnmanagedMemory<T> : ICollection<T>, IEquatable<Unm
     {
         private T* _current;
         private readonly T* _inclusiveEnd;
-        private readonly UnmanagedMemory<T> _parent;
+        private SafeHandle? _parent;
 
         /// <inheritdoc/>
         public T Current => *_current;
         readonly object IEnumerator.Current => *_current;
 
-        internal Enumerator(UnmanagedMemory<T> parent)
+        internal Enumerator(SafeHandle parent, long length)
         {
-            ThrowHelpers.ThrowIf(parent.disposed, parent, ThrowHelpers.CreateObjectDisposedException);
+            bool success = false;
+            parent.DangerousAddRef(ref success);
+            ThrowHelpers.ThrowIf(!success, parent, ThrowHelpers.CreateObjectDisposedException);
 
             _parent = parent;
 
-            if (parent.Length == 0)
+            if (length <= 0)
             {
                 _current = null;
                 _inclusiveEnd = null;
                 return;
             }
 
-            _current = parent.buffer - 1;
-            _inclusiveEnd = _current + parent.Length - 1;
+            _current = ((T*)parent.DangerousGetHandle()) - 1;
+            _inclusiveEnd = _current + length - 1;
         }
 
         /// <inheritdoc/>
@@ -57,49 +60,68 @@ public abstract unsafe class UnmanagedMemory<T> : ICollection<T>, IEquatable<Unm
         /// <inheritdoc/>
         public void Reset()
         {
-            ThrowHelpers.ThrowIf(_parent.disposed, _parent, ThrowHelpers.CreateObjectDisposedException);
-            _current = _parent.buffer - 1;
+            ThrowHelpers.ThrowIf(_parent is null, this, ThrowHelpers.CreateObjectDisposedException);
+            _current = ((T*)_parent.DangerousGetHandle()) - 1;
         }
 
-        readonly void IDisposable.Dispose() { }
+        /// <inheritdoc/>
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _parent, null) is { } parent)
+            {
+                parent.DangerousRelease();
+            }
+        }
     }
 
-    internal volatile bool disposed;
+    /// <summary>
+    /// Gets a reference to a boolean value indicating whether the object has been disposed.
+    /// </summary>
+#if NET8_0_OR_GREATER
+    protected ref bool Disposed => ref _disposed;
+    private bool _disposed;
+#else
+    protected ref bool Disposed => ref System.Runtime.CompilerServices.Unsafe.As<int, bool>(ref _disposed);
+    private int _disposed;
+#endif
 
-    internal T* buffer;
+    /// <summary>
+    /// Represents the handle to the unmanaged memory buffer used for data storage.
+    /// </summary>
+    protected abstract SafeHandle Handle { get; }
 
-    /// <inheritdoc cref="ICollection{T}.Count"/>
+    /// <inheritdoc cref="IBigCollection{T}.Count"/>
     public abstract long Length { get; }
-    int ICollection<T>.Count => checked((int)Length);
+
+    long IBigCollection<T>.Count => Length;
 
     bool ICollection<T>.IsReadOnly => false;
 
-    /// <inheritdoc/>
-    public bool Equals(UnmanagedMemory<T>? other)
-    {
-        return ReferenceEquals(this, other) || (other is { } && buffer == other.buffer);
-    }
+#if NETFRAMEWORK
+    int ICollection<T>.Count => checked((int)Length);
+#endif
 
     /// <inheritdoc/>
     override public bool Equals(object? obj)
     {
-        return obj is UnmanagedMemory<T> other && Equals(other);
+        return obj is UnmanagedMemory<T> other && other.Handle.Equals(Handle);
     }
 
     /// <inheritdoc/>
     override public int GetHashCode()
     {
-        return ((IntPtr)buffer).GetHashCode();
+        return Handle.GetHashCode();
     }
 
     /// <inheritdoc/>
     public void Clear()
     {
-        UnmanagedMarshal.Clear(buffer, Length);
+        using SafeHandle.Scope scope = Handle.GetScoped();
+        UnmanagedMarshal.Clear((T*)scope, Length);
     }
 
     /// <inheritdoc/>
-    public Enumerator GetEnumerator() => new(this);
+    public Enumerator GetEnumerator() => new(Handle, Length);
 
     /// <inheritdoc/>
     public abstract bool Contains(T item);
@@ -107,17 +129,66 @@ public abstract unsafe class UnmanagedMemory<T> : ICollection<T>, IEquatable<Unm
     /// <inheritdoc/>
     public void CopyTo(T[] array, int arrayIndex)
     {
-        ThrowHelpers.ThrowIf(disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
         ThrowHelpers.ThrowIf(array is null, nameof(array), ThrowHelpers.CreateArgumentNullException);
         ThrowHelpers.ThrowIf((uint)arrayIndex > array.Length, arrayIndex, ThrowHelpers.CreateArgumentOutOfRangeException);
         if ((array.Length - arrayIndex) < Length)
         {
             throw new ArgumentException($"The number of elements in the source collection is greater than the available space from {nameof(arrayIndex)} to the end of the destination array.");
         }
+        using SafeHandle.Scope scope = Handle.GetScoped();
         fixed (T* destination = &array[arrayIndex])
         {
-            UnmanagedMarshal.Copy(buffer, destination, Length);
+            UnmanagedMarshal.Copy((T*)scope, destination, Length);
         }
+    }
+
+    /// <summary>
+    /// Creates a new <see cref="SafeHandle"/> instance by cloning the memory referenced by the specified handle for a given number of
+    /// unmanaged elements.
+    /// </summary>
+    /// <typeparam name="T">The unmanaged type of the elements to clone from the original handle.</typeparam>
+    /// <param name="handle">
+    /// The <see cref="SafeHandle"/> instance to clone. Must reference valid, allocated unmanaged 
+    /// memory.
+    /// </param>
+    /// <param name="elementCount">
+    /// The number of elements of type <typeparamref name="T"/> to allocate and copy into the new 
+    /// <see cref="SafeHandle"/>.
+    /// </param>
+    /// <returns>
+    /// A <see cref="SafeHandle"/> that owns a newly allocated memory region containing a copy of 
+    /// the data from the original handle.
+    /// </returns>
+    protected static SafeHandle Clone(SafeHandle handle, long elementCount)
+    {
+        SafeHandle.Scope scope = handle.GetScoped();
+        void* buffer = null;
+        long bytesAllocated = 0L;
+        try
+        {
+            buffer = UnmanagedMarshal.Alloc<T>(elementCount, out bytesAllocated);
+            UnmanagedMarshal.Copy((void*)scope, buffer, bytesAllocated);
+            return new SafeHandle((IntPtr)buffer);
+        }
+        catch when (buffer != null)
+        {
+            UnmanagedMarshal.Free(buffer, bytesAllocated);
+            throw;
+        }
+        finally
+        {
+            scope.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// Releases the resources used by the current instance and performs cleanup operations.
+    /// </summary>
+    protected virtual void Disposing()
+    {
+        Handle.Dispose();
+        GC.RemoveMemoryPressure(Length * sizeof(T));
     }
 
     /// <summary>
@@ -129,26 +200,14 @@ public abstract unsafe class UnmanagedMemory<T> : ICollection<T>, IEquatable<Unm
     /// </param>
     protected virtual void Dispose(bool disposing)
     {
-        if (disposed)
+#if NET8_0_OR_GREATER
+        if (Interlocked.Exchange(ref _disposed, false) && disposing)
+#else
+        if (Interlocked.Exchange(ref _disposed, byte.MaxValue) == byte.MinValue && disposing)
+#endif
         {
-            return;
+            Disposing();
         }
-
-        if (buffer != null)
-        {
-            UnmanagedMarshal.Free(buffer, Length);
-            buffer = null;
-        }
-
-        disposed = true;
-    }
-
-    /// <summary>
-    /// Releases unmanaged resources held by the <see cref="UnmanagedMemory{T}"/> instance when it is finalized.
-    /// </summary>
-    ~UnmanagedMemory()
-    {
-        Dispose(disposing: false);
     }
 
     /// <inheritdoc/>
