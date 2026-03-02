@@ -164,11 +164,12 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
             {
                 lock (_lock)
                 {
-                    UpdateCacheEntry(request);
-                }
+                UpdateCacheEntry(request);
+                await EvictCacheEntriesAsync();
+            }
                     
                 await EvictCacheEntriesAsync(cancellationToken);
-            }
+        }
         }
         finally
         {
@@ -266,9 +267,10 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     private static void DisposeInvalidated(Task<TValue?> invalidate)
     {
         TValue? value = invalidate.GetAwaiter().GetResult();
-        if (value is IDisposable disposable)
-        {
-            disposable.Dispose();
+            if (value is IDisposable disposable)
+            {
+                disposable.Dispose();
+            }
         }
     }
 
