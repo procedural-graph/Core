@@ -36,7 +36,7 @@ public abstract class GraphEntity<TKey, TValue> :
         /// <summary>
         /// Gets the unique identifier of the entity associated with this model.
         /// </summary>
-        public abstract Guid ID { get; }
+        public Guid ID { get; init; }
 
         /// <summary>
         /// Attempts to retrieve the unique identifier of the scene member associated with this graph entity model.

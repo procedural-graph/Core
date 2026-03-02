@@ -25,7 +25,7 @@ public abstract partial class GraphComponent<TKey, TValue> : IGraphNode
         /// <summary>
         /// Gets the unique identifier of the parent node associated with this node.
         /// </summary>
-        public abstract Guid ParentID { get; }
+        public Guid ParentID { get; init; }
     }
 
     /// <summary>
