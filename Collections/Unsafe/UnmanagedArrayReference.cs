@@ -17,7 +17,7 @@ public sealed class UnmanagedArrayReference<TValue> : UnmanagedArray<TValue> whe
     public override long Length => Source.Length;
 
     /// <inheritdoc/>
-    protected override SafeHandle Handle => Source.handle;
+    protected override SafeHandle Handle { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UnmanagedArrayReference{TValue}"/> class using the specified unmanaged array source.
@@ -27,7 +27,11 @@ public sealed class UnmanagedArrayReference<TValue> : UnmanagedArray<TValue> whe
     public UnmanagedArrayReference(UnmanagedArraySource<TValue> source)
     {
         Source = source ?? throw new ArgumentNullException(nameof(source));
-        source.handle.DangerousAddRef(ref Disposed);
+        Handle = source.GetHandle();
+        bool success = false;
+        Handle.DangerousAddRef(ref success);
+        ThrowHelpers.ThrowIf(!success, nameof(source), ThrowHelpers.CreateObjectDisposedException);
+        Source = source;
     }
 
     /// <inheritdoc/>

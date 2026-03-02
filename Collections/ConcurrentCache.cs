@@ -21,16 +21,22 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     private readonly record struct CacheEntry(TKey Key, DateTime LastAccessTime);
     private readonly record struct CacheRequest(TKey Key, DateTime RequestTime);
 
-    private static readonly UnboundedChannelOptions _cacheChannelOptions = new()
+    private static readonly BoundedChannelOptions _cacheChannelOptions = new(100)
     {
         SingleReader = true,
-        SingleWriter = false
+        SingleWriter = false,
+        FullMode = BoundedChannelFullMode.DropOldest
     };
 
     private readonly ConcurrentDictionary<TKey, Lazy<Task<TValue>>> _cache = [];
     private readonly Dictionary<TKey, LinkedListNode<CacheEntry>> _lruMap = [];
     private readonly LinkedList<CacheEntry> _lruList = [];
-    private readonly Channel<CacheRequest> _lruChannel = Channel.CreateUnbounded<CacheRequest>(_cacheChannelOptions);
+    private readonly Channel<CacheRequest> _lruChannel = Channel.CreateBounded<CacheRequest>(_cacheChannelOptions);
+#if NET9_0_OR_GREATER
+    private readonly Lock _lock = new();
+#else
+    private readonly object _lock = new();
+#endif
     private CancellationTokenSource? _cts = null;
 
     private bool _disposed;
@@ -62,11 +68,9 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     public async ValueTask<TValue> GetOrAddAsync(TKey key, CancellationToken cancellationToken = default)
     {
         ThrowHelpers.ThrowIf(_disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        Task<TValue> task = _cache.GetOrAdd(key, OnAdd).Value;
-#if NET8_0_OR_GREATER
-        task = task.WaitAsync(cancellationToken);
-#endif
-        TValue result = await task.ConfigureAwait(false);
+        Task<TValue> creation = _cache.GetOrAdd(key, OnAdd).Value;
+        Task<TValue> wait = creation.WaitAsync(cancellationToken);
+        TValue result = await wait.ConfigureAwait(false);
         await _lruChannel.Writer.WriteAsync(new CacheRequest(key, DateTime.UtcNow), cancellationToken);
         return result;
     }
@@ -74,6 +78,48 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     private Lazy<Task<TValue>> OnAdd(TKey key)
     {
         return new Lazy<Task<TValue>>(() => CreateInstanceAsync(key, _cts!.Token), LazyThreadSafetyMode.ExecutionAndPublication);
+    }
+
+    /// <summary>
+    /// Asynchronously removes the cache entry associated with the specified key and returns its value if the entry was
+    /// present.
+    /// </summary>
+    /// <param name="key">The key of the cache entry to remove. The key must exist in the cache for the operation to succeed.</param>
+    /// <param name="cancellationToken">
+    /// A <see cref="CancellationToken"/> that can be used to cancel the operation. 
+    /// The default value is <see cref="CancellationToken.None"/>.
+    /// </param>
+    /// <returns>
+    /// A <see cref="ValueTask"/> that represents the asynchronous operation. The task result contains the value associated with the
+    /// specified key if it was successfully removed from the cache; otherwise, <see langword="null"/>.
+    /// </returns>
+    public async ValueTask<TValue?> InvalidateAsync(TKey key, CancellationToken cancellationToken = default)
+    {
+        if (!_cache.TryRemove(key, out Lazy<Task<TValue>>? result))
+        {
+            return null;
+        }
+
+        lock (_lock)
+        {
+#if NETFRAMEWORK
+            LinkedListNode<CacheEntry> node = _lruMap[key];
+            _lruList.Remove(node);
+            _lruMap.Remove(key);
+#else
+            if (_lruMap.Remove(key, out LinkedListNode<CacheEntry>? node))
+            {
+                _lruList.Remove(node);
+            }
+#endif
+        }
+
+        Task<TValue> task = result.Value.WaitAsync(cancellationToken);
+        TValue value = await task.ConfigureAwait(false);
+
+        Interlocked.Add(ref _currentSize, -ComputeSize(value));
+
+        return value;
     }
 
     /// <summary>
@@ -116,8 +162,12 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
         {
             await foreach (CacheRequest request in _lruChannel.Reader.ReadAllAsync(cts.Token))
             {
-                UpdateCacheEntry(request);
-                await EvictCacheEntriesAsync();
+                lock (_lock)
+                {
+                    UpdateCacheEntry(request);
+                }
+                    
+                await EvictCacheEntriesAsync(cancellationToken);
             }
         }
         finally
@@ -163,33 +213,62 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
 #endif
     }
 
-    private async ValueTask EvictCacheEntriesAsync()
+    private async ValueTask EvictCacheEntriesAsync(CancellationToken cancellationToken)
     {
         DateTime currentTime = DateTime.UtcNow;
         TimeSpan timeToLive = TimeToLive;
 
         long maxCacheSizeBytes = MaxSize;
 
-        LinkedListNode<CacheEntry>? nextNode = _lruList.Last;
-        LinkedListNode<CacheEntry> currentNode;
-        while (nextNode?.Value is { } entry && (_currentSize > maxCacheSizeBytes || (currentTime - entry.LastAccessTime) > timeToLive))
+        LinkedListNode<CacheEntry>? expectedNextNode;
+        LinkedListNode<CacheEntry>? currentNode;
+
+        lock (_lock)
         {
-            Lazy<Task<TValue>> item = _cache[entry.Key];
-            TValue value = await item.Value;
+            currentNode = _lruList.Last;
+            expectedNextNode = currentNode?.Previous;
+        }
 
-            Interlocked.Add(ref _currentSize, -ComputeSize(value));
+        while (currentNode?.Value is { } entry && (_currentSize > maxCacheSizeBytes || (currentTime - entry.LastAccessTime) > timeToLive))
+        {
+            ValueTask<TValue?> invalidate = InvalidateAsync(entry.Key, cancellationToken);
 
-            (currentNode, nextNode) = (nextNode, nextNode.Previous);
-
-            _lruList.Remove(currentNode);
-            _lruMap.Remove(entry.Key);
-            KeyValuePair<TKey, Lazy<Task<TValue>>> removedItem = new(entry.Key, item);
-            ((ICollection<KeyValuePair<TKey, Lazy<Task<TValue>>>>)_cache).Remove(removedItem);
-
-            if (value is IDisposable disposable)
+            if (!invalidate.IsCompleted)
             {
-                disposable.Dispose();
+                Task<TValue?> task = invalidate.AsTask();
+                _ = task.ContinueWith(
+                    DisposeInvalidated,
+                    CancellationToken.None,
+                    TaskContinuationOptions.OnlyOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
             }
+            else if (invalidate.IsCompletedSuccessfully)
+            {
+                TValue? value = await invalidate;
+                if (value is IDisposable disposable)
+                {
+                    disposable.Dispose();
+                }
+            }
+
+            lock (_lock)
+            {
+                if (!ReferenceEquals(currentNode?.Previous, expectedNextNode))
+                {
+                    break;
+                }
+
+                (currentNode, expectedNextNode) = (expectedNextNode, expectedNextNode?.Previous);
+            }
+        }
+    }
+
+    private static void DisposeInvalidated(Task<TValue?> invalidate)
+    {
+        TValue? value = invalidate.GetAwaiter().GetResult();
+        if (value is IDisposable disposable)
+        {
+            disposable.Dispose();
         }
     }
 

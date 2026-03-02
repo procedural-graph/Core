@@ -16,15 +16,14 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
     /// <summary>
     /// Enumerates the elements of a contiguous memory region.
     /// </summary>
-    public struct Enumerator : IEnumerator<T>
+    public ref struct Enumerator : IDisposable
     {
         private T* _current;
         private readonly T* _inclusiveEnd;
         private SafeHandle? _parent;
 
-        /// <inheritdoc/>
+        /// <inheritdoc cref="IEnumerator{T}.Current"/>
         public T Current => *_current;
-        readonly object IEnumerator.Current => *_current;
 
         internal Enumerator(SafeHandle parent, long length)
         {
@@ -45,7 +44,7 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
             _inclusiveEnd = _current + length - 1;
         }
 
-        /// <inheritdoc/>
+        /// <inheritdoc cref="IEnumerator.MoveNext"/>
         public bool MoveNext()
         {
             if (_current < _inclusiveEnd)
@@ -58,19 +57,63 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
         }
 
         /// <inheritdoc/>
-        public void Reset()
-        {
-            ThrowHelpers.ThrowIf(_parent is null, this, ThrowHelpers.CreateObjectDisposedException);
-            _current = ((T*)_parent.DangerousGetHandle()) - 1;
-        }
-
-        /// <inheritdoc/>
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _parent, null) is { } parent)
             {
                 parent.DangerousRelease();
             }
+        }
+    }
+
+    private sealed class AllocEnumerator : IEnumerator<T>
+    {
+        private T* _current;
+        private readonly T* _inclusiveEnd;
+        private SafeHandle? _parent;
+
+        public T Current => *_current;
+        object IEnumerator.Current => Current;
+
+        public AllocEnumerator(SafeHandle parent, long length)
+        {
+            bool success = false;
+            parent.DangerousAddRef(ref success);
+            ThrowHelpers.ThrowIf(!success, parent, ThrowHelpers.CreateObjectDisposedException);
+            _parent = parent;
+            if (length <= 0)
+            {
+                _current = null;
+                _inclusiveEnd = null;
+                return;
+            }
+            _current = ((T*)parent.DangerousGetHandle()) - 1;
+            _inclusiveEnd = _current + length - 1;
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _parent, null) is { } parent)
+            {
+                parent.DangerousRelease();
+            }
+        }
+
+        public bool MoveNext()
+        {
+            if (_current < _inclusiveEnd)
+            {
+                _current++;
+                return true;
+            }
+
+            return false;
+        }
+
+        public void Reset()
+        {
+            ThrowHelpers.ThrowIf(_parent is null, this, ThrowHelpers.CreateObjectDisposedException);
+            _current = ((T*)_parent.DangerousGetHandle()) - 1;
         }
     }
 
@@ -122,6 +165,12 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
 
     /// <inheritdoc/>
     public Enumerator GetEnumerator() => new(Handle, Length);
+
+    private AllocEnumerator GetAllocatingEnumerator()
+    {
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        return new AllocEnumerator(Handle, Length);
+    }
 
     /// <inheritdoc/>
     public abstract bool Contains(T item);
@@ -182,6 +231,12 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
         }
     }
 
+    internal SafeHandle GetHandle()
+    {
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        return Handle;
+    }
+
     /// <summary>
     /// Releases the resources used by the current instance and performs cleanup operations.
     /// </summary>
@@ -201,7 +256,7 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
     protected virtual void Dispose(bool disposing)
     {
 #if NET8_0_OR_GREATER
-        if (Interlocked.Exchange(ref _disposed, false) && disposing)
+        if (Interlocked.Exchange(ref _disposed, true) && disposing)
 #else
         if (Interlocked.Exchange(ref _disposed, byte.MaxValue) == byte.MinValue && disposing)
 #endif
@@ -217,9 +272,9 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
         GC.SuppressFinalize(this);
     }
 
-    IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetEnumerator();
+    IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetAllocatingEnumerator();
 
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => GetAllocatingEnumerator();
 
     void ICollection<T>.Add(T item)
     {

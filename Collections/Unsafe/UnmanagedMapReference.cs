@@ -22,7 +22,7 @@ public sealed class UnmanagedMapReference<T> : UnmanagedMap<T> where T : unmanag
     public override long Length => Source.Length;
 
     /// <inheritdoc/>
-    protected override SafeHandle Handle => Source.handle;
+    protected override SafeHandle Handle { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UnmanagedMapReference{T}"/> class using the specified unmanaged map as the owner.
@@ -31,7 +31,10 @@ public sealed class UnmanagedMapReference<T> : UnmanagedMap<T> where T : unmanag
     public UnmanagedMapReference(UnmanagedMapSource<T> source)
     {
         ThrowHelpers.ThrowIf(source is null, nameof(source), ThrowHelpers.CreateArgumentNullException);
-        source.handle.DangerousAddRef(ref Disposed);
+        Handle = source.GetHandle();
+        bool success = false;
+        Handle.DangerousAddRef(ref success);
+        ThrowHelpers.ThrowIf(!success, nameof(source), ThrowHelpers.CreateObjectDisposedException);
         Source = source;
     }
 

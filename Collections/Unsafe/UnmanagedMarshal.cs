@@ -12,40 +12,62 @@ namespace ProceduralGraph.Collections.Unsafe;
 public static partial class UnmanagedMarshal
 {
     /// <summary>
-    /// Creates an <see cref="UnmanagedArray{T}"/> wrapper for a block of memory starting at the specified pointer.
+    /// Creates an <see cref="UnmanagedArraySource{T}"/> wrapper for a block of memory starting at the specified pointer.
     /// </summary>
     /// <typeparam name="T">The type of elements in the unmanaged memory block. Must be an unmanaged type.</typeparam>
     /// <param name="pointer">A pointer to the first element of the unmanaged memory block to wrap.</param>
     /// <param name="length">The number of elements in the unmanaged memory block. Must be non-negative.</param>
     /// <returns>An <see cref="UnmanagedArray{T}"/> instance representing the specified unmanaged memory region.</returns>
-    public static unsafe UnmanagedArray<T> AsUnmanaged<T>(T* pointer, int length) where T : unmanaged
+    public static unsafe UnmanagedArraySource<T> AsUnmanaged<T>(T* pointer, int length) where T : unmanaged
     {
-        return new UnmanagedArray<T>(pointer, length);
+        SafeHandle handle = new((IntPtr)pointer);
+        try
+        {
+            return new UnmanagedArraySource<T>(handle, length);
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
-    /// Creates an <see cref="UnmanagedMap{T}"/> wrapper for a block of memory starting at the specified pointer.
+    /// Creates an <see cref="UnmanagedMapSource{T}"/> wrapper for a block of memory starting at the specified pointer.
     /// </summary>
     /// <typeparam name="T">The type of elements stored in the unmanaged memory. Must be an unmanaged type.</typeparam>
     /// <param name="pointer">A pointer to the first element of the unmanaged memory block to wrap.</param>
     /// <param name="width">The number of elements in each row of the 2D memory block. Must be greater than zero.</param>
     /// <param name="height">The number of rows in the 2D memory block. Must be greater than zero.</param>
     /// <returns>An instance of <see cref="UnmanagedMap{T}"/> representing the specified unmanaged 2D memory region.</returns>
-    public static unsafe UnmanagedMap<T> AsUnmanaged<T>(T* pointer, long width, long height) where T : unmanaged
+    public static unsafe UnmanagedMapSource<T> AsUnmanaged<T>(T* pointer, long width, long height) where T : unmanaged
     {
-        return new UnmanagedMap<T>(pointer, width, height);
+        SafeHandle handle = new((IntPtr)pointer);
+        try
+        {
+            return new UnmanagedMapSource<T>(handle, width, height);
+        }
+        catch
+        {
+            handle.Dispose();
+            throw;
+        }
     }
 
     /// <summary>
-    /// Returns a pointer to the first element of the specified unmanaged memory block.
+    /// Gets a safe handle to the unmanaged memory represented by the specified <see cref="UnmanagedMemory{T}"/>
+    /// instance.
     /// </summary>
-    /// <typeparam name="T">The type of elements stored in the unmanaged memory. Must be an unmanaged type.</typeparam>
-    /// <param name="memory">The unmanaged memory block from which to obtain the pointer.</param>
-    /// <returns>A pointer to the first element of the unmanaged memory block represented by <paramref name="memory"/>.</returns>
-    public static unsafe T* AsPointer<T>(UniqueUnmanagedMemory<T> memory) where T : unmanaged
+    /// <typeparam name="T">The type of elements stored in the unmanaged memory. Must be unmanaged.</typeparam>
+    /// <param name="memory">
+    /// The <see cref="UnmanagedMemory{T}"/> instance that represents the unmanaged memory. This parameter must not be
+    /// <see langword="null"/>.
+    /// </param>
+    /// <returns>A <see cref="SafeHandle"/> that represents the handle to the unmanaged memory.</returns>
+    public static SafeHandle GetHandle<T>(UnmanagedMemory<T> memory) where T : unmanaged
     {
-        ThrowHelpers.ThrowIf(memory.disposed, memory, ThrowHelpers.CreateObjectDisposedException);
-        return memory.buffer;
+        ThrowHelpers.ThrowIf(memory is null, nameof(memory), ThrowHelpers.CreateArgumentNullException);
+        return memory.GetHandle();
     }
 
     /// <summary>

@@ -12,9 +12,8 @@ public sealed class UnmanagedArraySource<TValue> : UnmanagedArray<TValue>, IClon
     /// <inheritdoc/>
     public override long Length { get; }
 
-    internal readonly SafeHandle handle;
     /// <inheritdoc/>
-    protected override SafeHandle Handle => handle;
+    protected override SafeHandle Handle { get; }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UnmanagedArraySource{T}"/> class that allocates a zero-initialized buffer for the
@@ -26,12 +25,12 @@ public sealed class UnmanagedArraySource<TValue> : UnmanagedArray<TValue>, IClon
         ThrowHelpers.ThrowIf(elementCount < 0L, elementCount, ThrowHelpers.CreateArgumentOutOfRangeException);
         Length = elementCount;
         TValue* buffer = UnmanagedMarshal.AllocZeroed<TValue>(elementCount, out _);
-        handle = new SafeHandle((IntPtr)buffer);
+        Handle = new SafeHandle((IntPtr)buffer);
     }
 
     internal UnmanagedArraySource(SafeHandle handle, long elementCount)
     {
-        this.handle = handle ?? throw new ArgumentNullException(nameof(handle));
+        Handle = handle ?? throw new ArgumentNullException(nameof(handle));
         ThrowHelpers.ThrowIf(elementCount < 0L, elementCount, ThrowHelpers.CreateArgumentOutOfRangeException);
         Length = elementCount;
     }

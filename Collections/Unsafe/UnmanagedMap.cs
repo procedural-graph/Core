@@ -78,11 +78,11 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
 
         long height = Height, width = Width;
         using SafeHandle.Scope scope = Handle.GetScoped();
-        TValue* rawSourcePtr = (TValue*)scope;
+        IntPtr rawSourcePtr = scope;
 
         Parallel.For(0L, height, y =>
         {
-            TValue* rowOffset = rawSourcePtr + (y * width);
+            TValue* rowOffset = (TValue*)rawSourcePtr + (y * width);
             for (long x = 0; x < width; x++)
             {
                 ref TValue valueRef = ref *(rowOffset + x);
@@ -112,15 +112,15 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
 
         long height = Height, width = Width;
         using SafeHandle.Scope sourceScope = Handle.GetScoped();
-        TValue* rawSourcePtr = (TValue*)sourceScope;
+        IntPtr rawSourcePtr = sourceScope;
 
         using SafeHandle.Scope destinationScope = destination.Handle.GetScoped();
-        TResult* rawDestinationPtr = (TResult*)destinationScope;
+        IntPtr rawDestinationPtr = destinationScope;
 
         Parallel.For(0, height, y =>
         {
-            TValue* sourceRowOffset = rawSourcePtr + (y * width);
-            TResult* destinationRowOffset = rawDestinationPtr + (y * width);
+            TValue* sourceRowOffset = (TValue*)rawSourcePtr + (y * width);
+            TResult* destinationRowOffset = (TResult*)rawDestinationPtr + (y * width);
             for (long x = 0; x < width; x++)
             {
                 *(destinationRowOffset + x) = operation.Apply(x, y, in *(sourceRowOffset + x));
@@ -155,19 +155,19 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         ThrowHelpers.ThrowIf(height != destination.Height, nameof(destination.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
 
         using SafeHandle.Scope source1Handle = Handle.GetScoped();
-        TValue* rawSource1Ptr = (TValue*)source1Handle;
+        IntPtr rawSource1Ptr = source1Handle;
 
         using SafeHandle.Scope source2Handle = source.Handle.GetScoped();
-        TSource* rawSource2Ptr = (TSource*)source2Handle;
+        IntPtr rawSource2Ptr = source2Handle;
 
         using SafeHandle.Scope destinationHandle = destination.Handle.GetScoped();
-        TResult* rawDestinationPtr = (TResult*)destinationHandle;
+        IntPtr rawDestinationPtr = destinationHandle;
 
         Parallel.For(0L, height, y =>
         {
-            TValue* source1RowOffset = rawSource1Ptr + (y * width);
-            TSource* source2RowOffset = rawSource2Ptr + (y * width);
-            TResult* destinationRowOffset = rawDestinationPtr + (y * width);
+            TValue* source1RowOffset = (TValue*)rawSource1Ptr + (y * width);
+            TSource* source2RowOffset = (TSource*)rawSource2Ptr + (y * width);
+            TResult* destinationRowOffset = (TResult*)rawDestinationPtr + (y * width);
             for (long x = 0; x < width; x++)
             {
                 *(destinationRowOffset + x) = operation.Apply(x, y, in *(source1RowOffset + x), in *(source2RowOffset + x));

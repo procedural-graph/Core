@@ -18,13 +18,12 @@ public sealed class UnmanagedMapSource<TValue> : UnmanagedMap<TValue>, ICloneabl
     /// <inheritdoc/>
     public override long Length { get; }
 
-    internal readonly SafeHandle handle;
     /// <inheritdoc/>
-    protected override SafeHandle Handle => handle;
+    protected override SafeHandle Handle { get; }
 
     internal UnmanagedMapSource(SafeHandle handle, long width, long height)
     {
-        this.handle = handle ?? throw new ArgumentNullException(nameof(handle));
+        Handle = handle ?? throw new ArgumentNullException(nameof(handle));
 
         ThrowHelpers.ThrowIf(width < 0L, width, ThrowHelpers.CreateArgumentOutOfRangeException);
         Width = width;
@@ -51,7 +50,7 @@ public sealed class UnmanagedMapSource<TValue> : UnmanagedMap<TValue>, ICloneabl
         Length = checked(width * height);
 
         TValue* buffer = UnmanagedMarshal.AllocZeroed<TValue>(Length, out _);
-        handle = new SafeHandle((IntPtr)buffer);
+        Handle = new SafeHandle((IntPtr)buffer);
     }
 
     /// <inheritdoc/>
