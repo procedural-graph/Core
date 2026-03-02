@@ -3,6 +3,7 @@ using System;
 using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.CompilerServices;
 
 namespace ProceduralGraph.Generic;
 
@@ -50,6 +51,17 @@ internal static class GraphTraverser
         int copiedCount = items.CopyTo(array, arrayIndex);
         Array.Sort(array, arrayIndex, copiedCount, GraphEntity<TKey, TValue>.comparer);
         return copiedCount;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static int AddChildren<TKey, TValue>(
+        GraphEntity<TKey, TValue>[] array,
+        ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> items,
+        int arrayIndex)
+        where TKey : struct, IEquatable<TKey>
+        where TValue : class
+    {
+        return items.CopyTo(array, arrayIndex);
     }
 
     public static T Pop<T>(T[] array, int index)

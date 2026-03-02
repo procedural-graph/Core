@@ -19,6 +19,7 @@ public ref struct DepthFirstGraphTraverser<TKey, TValue> : IEnumerator<GraphEnti
     private GraphEntity<TKey, TValue>[]? _rentedArray;
     private int _count;
     private bool _completed;
+    private readonly Func<GraphEntity<TKey, TValue>[], ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>, int, int> _add;
 
     private GraphEntity<TKey, TValue>? _current;
 
@@ -30,7 +31,11 @@ public ref struct DepthFirstGraphTraverser<TKey, TValue> : IEnumerator<GraphEnti
     /// Initializes a new instance of the <see cref="DepthFirstGraphTraverser{TKey, TValue}"/> structure starting from the specified root graph entity.
     /// </summary>
     /// <param name="root">The root graph entity from which the traversal begins. Cannot be <see langword="null"/>.</param>
-    public DepthFirstGraphTraverser(GraphEntity<TKey, TValue> root)
+    /// <param name="preordered">
+    /// Determines whether to add children in a preordered manner (sorted by key) or in the order they are encountered. 
+    /// Defaults to <see langword="true"/> for preordered traversal.
+    /// </param>
+    public DepthFirstGraphTraverser(GraphEntity<TKey, TValue> root, bool preordered = true)
     {
 #if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(root);
@@ -42,6 +47,7 @@ public ref struct DepthFirstGraphTraverser<TKey, TValue> : IEnumerator<GraphEnti
 #endif
         _rentedArray = RentDefaultAllocationSize<GraphEntity<TKey, TValue>>();
         _root = root;
+        _add = preordered ? AddSortedChildren : AddChildren;
     }
 
     /// <inheritdoc/>
@@ -67,7 +73,7 @@ public ref struct DepthFirstGraphTraverser<TKey, TValue> : IEnumerator<GraphEnti
             {
                 Grow(newCount, ref _rentedArray, _count);
             }
-            _count += AddSortedChildren(_rentedArray, children, _count);
+            _count += _add(_rentedArray, children, _count);
         }
 
         if (_count > 0)

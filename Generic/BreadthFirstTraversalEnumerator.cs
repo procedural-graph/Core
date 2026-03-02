@@ -21,6 +21,7 @@ public ref struct BreadthFirstTraversalEnumerator<TKey, TValue> : IEnumerator<Gr
     private int _head;
     private int _tail;
     private bool _completed;
+    private readonly Func<GraphEntity<TKey, TValue>[], ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>, int, int> _add;
 
     private GraphEntity<TKey, TValue>? _current;
 
@@ -32,7 +33,11 @@ public ref struct BreadthFirstTraversalEnumerator<TKey, TValue> : IEnumerator<Gr
     /// Initializes a new instance of the <see cref="BreadthFirstTraversalEnumerator{TKey, TValue}"/> structure starting from the specified root graph entity.
     /// </summary>
     /// <param name="root">The root graph entity from which the traversal begins. Cannot be <see langword="null"/>.</param>
-    public BreadthFirstTraversalEnumerator(GraphEntity<TKey, TValue> root)
+    /// <param name="preordered">
+    /// Determines whether to add children in a preordered manner (sorted by key) or in the order they are encountered. 
+    /// Defaults to <see langword="true"/> for preordered traversal.
+    /// </param>
+    public BreadthFirstTraversalEnumerator(GraphEntity<TKey, TValue> root, bool preordered = true)
     {
 #if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(root);
@@ -44,6 +49,7 @@ public ref struct BreadthFirstTraversalEnumerator<TKey, TValue> : IEnumerator<Gr
 #endif
         _rentedArray = RentDefaultAllocationSize<GraphEntity<TKey, TValue>>();
         _root = root;
+        _add = preordered ? AddSortedChildren : AddChildren;
     }
 
     /// <inheritdoc/>
@@ -83,7 +89,7 @@ public ref struct BreadthFirstTraversalEnumerator<TKey, TValue> : IEnumerator<Gr
                 _head = 0;
             }
 
-            _tail += AddSortedChildren(_rentedArray, children, _tail);
+            _tail += _add(_rentedArray, children, _tail);
         }
 
         if (_head < _tail)
