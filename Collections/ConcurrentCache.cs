@@ -16,6 +16,57 @@ namespace ProceduralGraph.Collections;
 /// <typeparam name="TValue">The type of the values stored in the cache. Must be a reference type.</typeparam>
 public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : notnull where TValue : class
 {
+    private ref struct ReverseChronologyEnumerator(LinkedList<AccessLog> chronology)
+    {
+        private readonly LinkedList<AccessLog> _chronology = chronology;
+
+        private LinkedListNode<AccessLog>? _expectedNextNode;
+        private LinkedListNode<AccessLog>? _currentNode;
+        
+        private bool _started;
+
+        public bool MoveNext([NotNullWhen(true)] out LinkedListNode<AccessLog>? currentNode)
+        {
+            currentNode = null;
+
+            if (_currentNode is null)
+            {
+                if (_started)
+                {
+                    return false;
+                }
+
+                lock (_chronology)
+                {
+                    _currentNode = _chronology.Last;
+                    _expectedNextNode = _currentNode?.Previous;
+                }
+
+                _started = true;
+            }
+            else
+            {
+                lock (_chronology)
+                {
+                    if (ReferenceEquals(_currentNode?.List, _chronology) && ReferenceEquals(_currentNode.Previous, _expectedNextNode))
+                    {
+                        _currentNode = _expectedNextNode;
+                        _expectedNextNode = _expectedNextNode?.Previous;
+                    }
+                    else
+                    {
+                        _currentNode = null;
+                        _expectedNextNode = null;
+                        return false;
+                    }
+                }
+            }
+
+            currentNode = _currentNode;
+            return currentNode is { };
+        }
+    }
+
     /// <summary>
     /// Represents a delegate that asynchronously creates a <typeparamref name="TValue"/> based on the specified 
     /// <paramref name="key"/>.
@@ -217,103 +268,58 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
 
     private void EvictCacheEntries()
     {
-        DateTime currentTime;
+        long maxSizeKiB = MaxSizeKiB;
         TimeSpan timeToLive = TimeToLive;
-        long maxCacheSizeBytes = MaxSizeKiB;
-
-        LinkedListNode<AccessLog>? expectedNextNode;
-        LinkedListNode<AccessLog>? currentNode;
-
-        bool remove;
-
+        DateTime currentTime = DateTime.UtcNow;
         do
         {
-            currentTime = DateTime.UtcNow;
+            ReverseChronologyEnumerator enumerator = new(_chronology);
+            LinkedListNode<AccessLog>? previousNode = null;
+            while (enumerator.MoveNext(out LinkedListNode<AccessLog>? currentNode))
+            {
+                AccessLog log;
+                lock (_chronology)
+                {
+                    log = currentNode.Value;
+                    if (previousNode is { } && ReferenceEquals(previousNode.List, _chronology))
+                    {
+                        _chronology.Remove(previousNode);
+                    }
+                }
+
+                previousNode = null;
+
+                if (_currentSizeKiB < maxSizeKiB && (currentTime - log.LastAccessTime) < timeToLive)
+                {
+                    return;
+                }
+
+                while (_entries.TryGetValue(log.Key, out Entry entry) && ReferenceEquals(entry.LogNode, currentNode) && entry.Item.IsCompleted)
+                {
+                    KeyValuePair<TKey, Entry> kvp = new(log.Key, entry);
+                    if (((ICollection<KeyValuePair<TKey, Entry>>)_entries).Remove(kvp))
+                    {
+                        CleanupEntry(ref _currentSizeKiB, in entry);
+                        previousNode = currentNode;
+                        break;
+                    }
+                }
+            }
+
+            if (previousNode is null)
+            {
+                continue;
+            }
 
             lock (_chronology)
             {
-                currentNode = _chronology.Last;
-                expectedNextNode = currentNode?.Previous;
-            }
-
-            if (currentNode is null)
-            {
-                return;
-            }
-
-            do
-            {
-                remove = true;
-
-                AccessLog log = currentNode.Value;
-
-                if (_currentSizeKiB < maxCacheSizeBytes && (currentTime - log.LastAccessTime) < timeToLive)
+                if (ReferenceEquals(previousNode.List, _chronology))
                 {
-                    break;
+                    _chronology.Remove(previousNode);
                 }
-
-                while (_entries.TryGetValue(log.Key, out Entry entry) && ReferenceEquals(entry.LogNode, currentNode))
-                {
-                    Task<TValue> creation = entry.Item;
-
-                    if (!creation.IsCompleted)
-                    {
-                        remove = false;
-                        break;
-                    }
-
-                    KeyValuePair<TKey, Entry> kvp = new(log.Key, entry);
-                    if (!((ICollection<KeyValuePair<TKey, Entry>>)_entries).Remove(kvp))
-                    {
-                        continue;
-                    }
-
-                    lock (_chronology)
-                    {
-                        if (ReferenceEquals(currentNode.List, _chronology))
-                        {
-                            _chronology.Remove(currentNode);
-                        }
-                    }
-
-                    if (creation.IsFaulted || creation.IsCanceled)
-                    {
-                        break;
-                    }
-
-                    Interlocked.Add(ref _currentSizeKiB, -entry.SizeKiB);
-
-                    if (creation.GetAwaiter().GetResult() is IDisposable disposable)
-                    {
-                        disposable.Dispose();
-                    }
-                }
-            }
-            while (CompareAndAdvanceBack(_chronology, ref currentNode, ref expectedNextNode, remove));
-        }
-        while (_currentSizeKiB > maxCacheSizeBytes);
-    }
-
-    private static bool CompareAndAdvanceBack(
-        LinkedList<AccessLog> list, 
-        [DisallowNull, NotNullWhen(true)] ref LinkedListNode<AccessLog>? currentNode, 
-        ref LinkedListNode<AccessLog>? expectedNextNode,
-        bool remove = true)
-    {
-        lock (list)
-        {
-            if (ReferenceEquals(currentNode.List, list) && ReferenceEquals(currentNode.Previous, expectedNextNode))
-            {
-                if (remove)
-                {
-                    list.Remove(currentNode);
-                }
-                (currentNode, expectedNextNode) = (expectedNextNode, expectedNextNode?.Previous);
-                return currentNode is { };
             }
         }
-
-        return false;
+        while (_currentSizeKiB > maxSizeKiB);
     }
 
     private bool TryRemove(TKey key, out Entry entry)
