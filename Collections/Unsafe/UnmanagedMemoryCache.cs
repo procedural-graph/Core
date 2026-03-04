@@ -20,34 +20,21 @@ public abstract class UnmanagedMemoryCache<TKey, TValue, TBase, TSource> : Concu
     where TBase : UnmanagedMemory<TValue>
     where TSource : class, TBase, ICloneable<TBase>
 {
-    private static readonly long _defaultCacheSize;
+    private static readonly long _defaultCacheSizeKiB;
 
     /// <inheritdoc/>
-    public override long MaxSizeKiB { get; }
+    public override long MaxSizeKiB => _defaultCacheSizeKiB;
 
     static UnmanagedMemoryCache()
     {
 #if NET5_0_OR_GREATER
-        const int MinMaxSize = 512 * 1024 * 1024; // 512 MB
-        GCMemoryInfo memoryInfo = GC.GetGCMemoryInfo();
-        _defaultCacheSize = Math.Max(memoryInfo.TotalAvailableMemoryBytes / 4L, MinMaxSize);
+        const int MinMaxSizeKiB = 256 * 1024; // 256 MB
+        System.GCMemoryInfo memoryInfo = System.GC.GetGCMemoryInfo();
+        _defaultCacheSizeKiB = System.Math.Max(memoryInfo.TotalAvailableMemoryBytes / 4L, MinMaxSizeKiB);
 #else
-        const int DefaultMaxSize = 1024 * 1024 * 1024; // 1 GB
-        _defaultCacheSize = DefaultMaxSize;
+        const int DefaultMaxSize = 1024 * 1024; // 1 GB
+        _defaultCacheSizeKiB = DefaultMaxSize;
 #endif
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="UnmanagedMemoryCache{TKey, TValue, TBase, TSource}"/> 
-    /// class with default maximum size and time-to-live settings.
-    /// </summary>
-    /// <remarks>
-    /// For .NET 5.0 and later, the maximum cache size is determined based on available system memory
-    /// to help optimize resource usage. For earlier versions, a predefined default maximum size is used.
-    /// </remarks>
-    public UnmanagedMemoryCache()
-    {
-        MaxSizeKiB = _defaultCacheSize;
     }
 
     /// <inheritdoc/>
