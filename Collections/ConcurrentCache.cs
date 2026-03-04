@@ -1,12 +1,10 @@
 ﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
-#if NET6_0_OR_GREATER
-using System.Runtime.InteropServices;
-#endif
 
 namespace ProceduralGraph.Collections;
 
@@ -18,25 +16,32 @@ namespace ProceduralGraph.Collections;
 /// <typeparam name="TValue">The type of the values stored in the cache. Must be a reference type.</typeparam>
 public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : notnull where TValue : class
 {
-    private readonly record struct CacheEntry(TKey Key, DateTime LastAccessTime);
-    private readonly record struct CacheRequest(TKey Key, DateTime RequestTime);
+    /// <summary>
+    /// Represents a delegate that asynchronously creates a <typeparamref name="TValue"/> based on the specified 
+    /// <paramref name="key"/>.
+    /// </summary>
+    /// <param name="key">The key used to generate the value. The value returned by the delegate is determined by this key.</param>
+    /// <param name="cancellationToken">A cancellation token that can be used to cancel the asynchronous value creation operation.</param>
+    /// <returns>
+    /// A <see cref="ValueTask{TResult}"/> that represents the asynchronous operation and contains the generated 
+    /// <typeparamref name="TValue"/>.
+    /// </returns>
+    public delegate ValueTask<TValue> FactoryDelegate(TKey key, CancellationToken cancellationToken);
 
-    private static readonly BoundedChannelOptions _cacheChannelOptions = new(100)
+    private readonly record struct Entry(Task<TValue> Item, LinkedListNode<AccessLog> LogNode, uint SizeKiB);
+    private readonly record struct AccessLog(TKey Key, DateTime LastAccessTime);
+    private readonly record struct AccessQuery(TKey Key, DateTime RequestTime);
+
+    private static readonly BoundedChannelOptions _channelOptions = new(100)
     {
         SingleReader = true,
         SingleWriter = false,
         FullMode = BoundedChannelFullMode.DropOldest
     };
 
-    private readonly ConcurrentDictionary<TKey, Lazy<Task<TValue>>> _cache = [];
-    private readonly Dictionary<TKey, LinkedListNode<CacheEntry>> _lruMap = [];
-    private readonly LinkedList<CacheEntry> _lruList = [];
-    private readonly Channel<CacheRequest> _lruChannel = Channel.CreateBounded<CacheRequest>(_cacheChannelOptions);
-#if NET9_0_OR_GREATER
-    private readonly Lock _lock = new();
-#else
-    private readonly object _lock = new();
-#endif
+    private readonly ConcurrentDictionary<TKey, Entry> _entries = [];
+    private readonly LinkedList<AccessLog> _chronology = [];
+    private readonly Channel<AccessQuery> _queries = Channel.CreateBounded<AccessQuery>(_channelOptions);
     private CancellationTokenSource? _cts = null;
 
     private bool _disposed;
@@ -47,15 +52,15 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     public abstract TimeSpan TimeToLive { get; }
 
     /// <summary>
-    /// Gets the maximum allowable size of the cache in bytes.
+    /// Gets the maximum allowable size of the cache in kibibytes.
     /// </summary>
-    public abstract long MaxSize { get; }
+    public abstract long MaxSizeKiB { get; }
 
-    private long _currentSize;
+    private long _currentSizeKiB;
     /// <summary>
-    /// Gets the current size of the cache in bytes.
+    /// Gets the current size of the cache in kibibytes.
     /// </summary>
-    public long CurrentSize => _currentSize;
+    public long CurrentSizeKiB => _currentSizeKiB;
 
     /// <summary>
     /// Asynchronously retrieves the value associated with the specified key, or adds a new value if the key does not
@@ -63,21 +68,35 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     /// </summary>
     /// <param name="key">The key whose value to retrieve or add. This key must be unique within the cache.</param>
     /// <param name="cancellationToken">A <see cref="CancellationToken"/> that can be used to cancel the asynchronous operation.</param>
+    /// <param name="factory">
+    /// A delegate that is invoked to create a value if the specified key does not exist in the cache. 
+    /// Cannot be <see langword="null"/>.
+    /// </param>
     /// <returns>A <see cref="Task"/> that represents the asynchronous operation. The task result contains the value associated with the
     /// specified key.</returns>
-    public async ValueTask<TValue> GetOrAddAsync(TKey key, CancellationToken cancellationToken = default)
+    public async ValueTask<TValue> GetOrAddAsync(TKey key, FactoryDelegate factory, CancellationToken cancellationToken = default)
     {
         ThrowHelpers.ThrowIf(_disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        Task<TValue> creation = _cache.GetOrAdd(key, OnAdd).Value;
-        Task<TValue> wait = creation.WaitAsync(cancellationToken);
-        TValue result = await wait.ConfigureAwait(false);
-        await _lruChannel.Writer.WriteAsync(new CacheRequest(key, DateTime.UtcNow), cancellationToken);
-        return result;
+        Entry entry = _entries.GetOrAdd(key, OnAdd, factory);
+        _queries.Writer.TryWrite(new AccessQuery(key, DateTime.UtcNow));
+        return await entry.Item.WaitAsync(cancellationToken);
     }
 
-    private Lazy<Task<TValue>> OnAdd(TKey key)
+    private Entry OnAdd(TKey key, FactoryDelegate factory)
     {
-        return new Lazy<Task<TValue>>(() => CreateInstanceAsync(key, _cts!.Token), LazyThreadSafetyMode.ExecutionAndPublication);
+        const TaskContinuationOptions ContinuationOptions = TaskContinuationOptions.ExecuteSynchronously | TaskContinuationOptions.NotOnRanToCompletion;
+
+        LinkedListNode<AccessLog> node = new(new AccessLog(key, DateTime.UtcNow));
+        lock (_chronology)
+        {
+            _chronology.AddFirst(node);
+        }
+
+        Task<TValue> creation = Add(key, factory);
+        Tuple<ConcurrentCache<TKey, TValue>, TKey> state = new(this, key);
+        _ = creation.ContinueWith(OnCreationFaulted, state, ContinuationOptions);
+
+        return new Entry(creation, node, default);
     }
 
     /// <summary>
@@ -93,46 +112,48 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     /// A <see cref="ValueTask"/> that represents the asynchronous operation. The task result contains the value associated with the
     /// specified key if it was successfully removed from the cache; otherwise, <see langword="null"/>.
     /// </returns>
-    public async ValueTask<TValue?> InvalidateAsync(TKey key, CancellationToken cancellationToken = default)
+    public async ValueTask<TValue?> RemoveAsync(TKey key, CancellationToken cancellationToken = default)
     {
-        if (!_cache.TryRemove(key, out Lazy<Task<TValue>>? result))
+        ThrowHelpers.ThrowIf(_disposed, this, ThrowHelpers.CreateObjectDisposedException);
+
+        if (!TryRemove(key, out Entry result))
         {
             return null;
         }
 
-        lock (_lock)
+        try
         {
-#if NETFRAMEWORK
-            LinkedListNode<CacheEntry> node = _lruMap[key];
-            _lruList.Remove(node);
-            _lruMap.Remove(key);
-#else
-            if (_lruMap.Remove(key, out LinkedListNode<CacheEntry>? node))
-            {
-                _lruList.Remove(node);
-            }
-#endif
+            TValue value = await result.Item.WaitAsync(cancellationToken);
+            Interlocked.Add(ref _currentSizeKiB, -result.SizeKiB);
+            return value;
         }
-
-        Task<TValue> task = result.Value.WaitAsync(cancellationToken);
-        TValue value = await task.ConfigureAwait(false);
-
-        Interlocked.Add(ref _currentSize, -ComputeSize(value));
-
-        return value;
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            CleanupEntry(ref _currentSizeKiB, in result);
+            throw;
+        }
     }
 
     /// <summary>
-    /// Asynchronously creates an instance of the <typeparamref name="TValue"/> associated with the provided key.
+    /// Invalidates the cache entry associated with the specified key, marking it for removal.
     /// </summary>
-    /// <param name="key">The key that identifies the instance to create. This parameter must not be <see langword="null"/> and should 
-    /// correspond to a valid entry in the underlying data source.</param>
-    /// <param name="cancellationToken">A <see cref="CancellationToken"/> that can be used to cancel the asynchronous operation.</param>
+    /// <param name="key">The key of the cache entry to invalidate. This key must not be <see langword="null"/>.</param>
     /// <returns>
-    /// A <see cref="Task"/> that represents the asynchronous operation. The task result contains the created 
-    /// <typeparamref name="TValue"/>.
+    /// Returns <see langword="true"/> if the cache entry was successfully invalidated; otherwise, 
+    /// <see langword="false"/>.
     /// </returns>
-    protected abstract Task<TValue> CreateInstanceAsync(TKey key, CancellationToken cancellationToken);
+    public bool Invalidate(TKey key)
+    {
+        ThrowHelpers.ThrowIf(_disposed, this, ThrowHelpers.CreateObjectDisposedException);
+
+        if (TryRemove(key, out Entry result))
+        {
+            CleanupEntry(ref _currentSizeKiB, in result);
+            return true;
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Processes incoming cache requests asynchronously and manages cache entries until cancellation is requested.
@@ -145,14 +166,7 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     /// <exception cref="InvalidOperationException">Thrown if this method is called more than once on the same instance.</exception>
     public async Task HandleRequestsAsync(CancellationToken cancellationToken)
     {
-#if NET7_0_OR_GREATER
-        ObjectDisposedException.ThrowIf(_disposed, this);
-#else
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(nameof(ConcurrentCache<,>));
-        }
-#endif
+        ThrowHelpers.ThrowIf(_disposed, this, ThrowHelpers.CreateObjectDisposedException);
         CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (Interlocked.CompareExchange(ref _cts, cts, null) is { })
         {
@@ -160,124 +174,263 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
         }
         try
         {
-            await foreach (CacheRequest request in _lruChannel.Reader.ReadAllAsync(cts.Token))
+            await foreach (AccessQuery request in _queries.Reader.ReadAllAsync(cts.Token))
             {
-                lock (_lock)
-                {
-                    UpdateCacheEntry(request);
-                }
-
-                await EvictCacheEntriesAsync(cancellationToken);
+                UpdateCacheEntry(request);
+                EvictCacheEntries();
             }
         }
         finally
         {
-            foreach (Lazy<Task<TValue>> item in _cache.Values)
+            foreach (Entry entry in _entries.Values)
             {
-                if (!item.IsValueCreated || item.Value.Status != TaskStatus.RanToCompletion)
-                {
-                    continue;
-                }
-
-                TValue value = item.Value.GetAwaiter().GetResult();
-                if (value is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
+                CleanupEntry(in entry);
             }
         }
     }
 
-    private void UpdateCacheEntry(CacheRequest request)
+    private void UpdateCacheEntry(AccessQuery request)
     {
-#if NET6_0_OR_GREATER
-        ref LinkedListNode<CacheEntry>? node = ref CollectionsMarshal.GetValueRefOrAddDefault(_lruMap, request.Key, out bool exists);
-        if (exists)
+        LinkedListNode<AccessLog>? node;
+        Entry newValue, oldValue;
+
+        do
         {
-            node!.ValueRef = node.Value with { LastAccessTime = request.RequestTime };
-            _lruList.Remove(node);
-            _lruList.AddFirst(node);
-            return;
+            if (!_entries.TryGetValue(request.Key, out oldValue))
+            {
+                return;
+            }
+
+            node = oldValue.LogNode ?? new LinkedListNode<AccessLog>(default);
+
+            newValue = oldValue with { LogNode = node };
         }
-        node = _lruList.AddFirst(new CacheEntry(request.Key, request.RequestTime));
-#else
-        if (_lruMap.TryGetValue(request.Key, out LinkedListNode<CacheEntry>? node))
+        while (!_entries.TryUpdate(request.Key, newValue, oldValue));
+
+        lock (_chronology)
         {
-            node.Value = node.Value with { LastAccessTime = request.RequestTime };
-            _lruList.Remove(node);
-            _lruList.AddFirst(node);
-            return;
+            node.Value = new AccessLog(request.Key, request.RequestTime);
+            node.List?.Remove(node);
+            _chronology.AddFirst(node);
         }
-        node = _lruList.AddFirst(new CacheEntry(request.Key, request.RequestTime));
-        _lruMap.Add(request.Key, node);
-#endif
     }
 
-    private async ValueTask EvictCacheEntriesAsync(CancellationToken cancellationToken)
+    private void EvictCacheEntries()
     {
-        DateTime currentTime = DateTime.UtcNow;
+        DateTime currentTime;
         TimeSpan timeToLive = TimeToLive;
+        long maxCacheSizeBytes = MaxSizeKiB;
 
-        long maxCacheSizeBytes = MaxSize;
+        LinkedListNode<AccessLog>? expectedNextNode;
+        LinkedListNode<AccessLog>? currentNode;
 
-        LinkedListNode<CacheEntry>? expectedNextNode;
-        LinkedListNode<CacheEntry>? currentNode;
+        bool remove;
 
-        lock (_lock)
+        do
         {
-            currentNode = _lruList.Last;
-            expectedNextNode = currentNode?.Previous;
-        }
+            currentTime = DateTime.UtcNow;
 
-        while (currentNode?.Value is { } entry && (_currentSize > maxCacheSizeBytes || (currentTime - entry.LastAccessTime) > timeToLive))
-        {
-            ValueTask<TValue?> invalidate = InvalidateAsync(entry.Key, cancellationToken);
-
-            if (!invalidate.IsCompleted)
+            lock (_chronology)
             {
-                Task<TValue?> task = invalidate.AsTask();
-                _ = task.ContinueWith(
-                    DisposeInvalidated,
-                    CancellationToken.None,
-                    TaskContinuationOptions.OnlyOnRanToCompletion | TaskContinuationOptions.ExecuteSynchronously,
-                    TaskScheduler.Default);
-            }
-            else if (invalidate.IsCompletedSuccessfully)
-            {
-                TValue? value = await invalidate;
-                if (value is IDisposable disposable)
-                {
-                    disposable.Dispose();
-                }
+                currentNode = _chronology.Last;
+                expectedNextNode = currentNode?.Previous;
             }
 
-            lock (_lock)
+            if (currentNode is null)
             {
-                if (!ReferenceEquals(currentNode?.Previous, expectedNextNode))
+                return;
+            }
+
+            do
+            {
+                remove = true;
+
+                AccessLog log = currentNode.Value;
+
+                if (_currentSizeKiB < maxCacheSizeBytes && (currentTime - log.LastAccessTime) < timeToLive)
                 {
                     break;
                 }
 
-                (currentNode, expectedNextNode) = (expectedNextNode, expectedNextNode?.Previous);
+                while (_entries.TryGetValue(log.Key, out Entry entry) && ReferenceEquals(entry.LogNode, currentNode))
+                {
+                    Task<TValue> creation = entry.Item;
+
+                    if (!creation.IsCompleted)
+                    {
+                        remove = false;
+                        break;
+                    }
+
+                    KeyValuePair<TKey, Entry> kvp = new(log.Key, entry);
+                    if (!((ICollection<KeyValuePair<TKey, Entry>>)_entries).Remove(kvp))
+                    {
+                        continue;
+                    }
+
+                    lock (_chronology)
+                    {
+                        if (ReferenceEquals(currentNode.List, _chronology))
+                        {
+                            _chronology.Remove(currentNode);
+                        }
+                    }
+
+                    if (creation.IsFaulted || creation.IsCanceled)
+                    {
+                        break;
+                    }
+
+                    Interlocked.Add(ref _currentSizeKiB, -entry.SizeKiB);
+
+                    if (creation.GetAwaiter().GetResult() is IDisposable disposable)
+                    {
+                        disposable.Dispose();
+                    }
+                }
             }
+            while (CompareAndAdvanceBack(_chronology, ref currentNode, ref expectedNextNode, remove));
         }
+        while (_currentSizeKiB > maxCacheSizeBytes);
     }
 
-    private static void DisposeInvalidated(Task<TValue?> invalidate)
+    private static bool CompareAndAdvanceBack(
+        LinkedList<AccessLog> list, 
+        [DisallowNull, NotNullWhen(true)] ref LinkedListNode<AccessLog>? currentNode, 
+        ref LinkedListNode<AccessLog>? expectedNextNode,
+        bool remove = true)
     {
-        TValue? value = invalidate.GetAwaiter().GetResult();
-        if (value is IDisposable disposable)
+        lock (list)
         {
-            disposable.Dispose();
+            if (ReferenceEquals(currentNode.List, list) && ReferenceEquals(currentNode.Previous, expectedNextNode))
+            {
+                if (remove)
+                {
+                    list.Remove(currentNode);
+                }
+                (currentNode, expectedNextNode) = (expectedNextNode, expectedNextNode?.Previous);
+                return currentNode is { };
+            }
         }
+
+        return false;
+    }
+
+    private bool TryRemove(TKey key, out Entry entry)
+    {
+        if (!_entries.TryRemove(key, out entry))
+        {
+            return false;
+        }
+
+        lock (_chronology)
+        {
+            LinkedListNode<AccessLog> logNode = entry.LogNode;
+            if (ReferenceEquals(logNode.List, _chronology))
+            {
+                _chronology.Remove(entry.LogNode);
+            }
+        }
+
+        return true;
     }
 
     /// <summary>
     /// Calculates the size, in bytes, of the specified value.
     /// </summary>
+    /// <remarks>
+    /// Values larger than 4096 GiB will be treated as 4096 GiB, and values smaller than 0 will be treated as 0.
+    /// </remarks>
     /// <param name="value">The value for which to compute the size. Cannot be <see langword="null"/>.</param>
     /// <returns>The size of the specified value, in bytes.</returns>
     protected abstract long ComputeSize(TValue value);
+
+    private uint ComputeSizeKib(TValue value)
+    {
+        long sizeInBytes = ComputeSize(value);
+#if NET7_0_OR_GREATER
+        return uint.CreateSaturating(sizeInBytes / 1024);
+#else
+        long sizeInKib = sizeInBytes / 1024;
+        return sizeInKib switch
+        {
+            < uint.MinValue => uint.MinValue,
+            > uint.MaxValue => uint.MaxValue,
+            _ => (uint)sizeInKib
+        };
+#endif
+    }
+
+    private async Task<TValue> Add(TKey key, FactoryDelegate factory)
+    {
+        TValue value = await factory(key, _cts!.Token);
+        uint sizeKib = ComputeSizeKib(value);
+
+        Entry currentValue, newValue;
+        do
+        {
+            if (!_entries.TryGetValue(key, out currentValue))
+            {
+                return value;
+            }
+
+            newValue = currentValue with { SizeKiB = sizeKib };
+        }
+        while (!_entries.TryUpdate(key, newValue, currentValue));
+
+        Interlocked.Add(ref _currentSizeKiB, sizeKib);
+
+        return value;
+    }
+
+    private static void CleanupEntry(ref long currentSizeKiB, in Entry entry)
+    {
+        Interlocked.Add(ref currentSizeKiB, -entry.SizeKiB);
+        CleanupEntry(entry);
+    }
+
+    private static void CleanupEntry(in Entry entry)
+    {
+        const TaskContinuationOptions ContinuationOptions = TaskContinuationOptions.ExecuteSynchronously | TaskContinuationOptions.OnlyOnRanToCompletion;
+        Task<TValue> creation = entry.Item;
+        switch (creation.Status)
+        {
+            case TaskStatus.RanToCompletion: DisposeInvalidated(creation); break;
+            case TaskStatus.Faulted or TaskStatus.Canceled: break;
+            default: creation.ContinueWith(DisposeInvalidated, ContinuationOptions); break;
+        }
+    }
+
+    private static void OnCreationFaulted(Task<TValue> creation, object? obj)
+    {
+        (ConcurrentCache<TKey, TValue> cache, TKey key) = (Tuple<ConcurrentCache<TKey, TValue>, TKey>)obj!;
+        while (cache._entries.TryGetValue(key, out Entry entry) && ReferenceEquals(entry.Item, creation))
+        {
+            KeyValuePair<TKey, Entry> kvp = new(key, entry);
+            if (!((ICollection<KeyValuePair<TKey, Entry>>)cache._entries).Remove(kvp))
+            {
+                continue;
+            }
+
+            lock (cache._chronology)
+            {
+                LinkedListNode<AccessLog> node = entry.LogNode;
+                if (ReferenceEquals(node.List, cache._chronology))
+                {
+                    cache._chronology.Remove(node);
+                }
+            }
+        }
+    }
+
+    private static void DisposeInvalidated(Task<TValue> invalidate)
+    {
+        TValue value = invalidate.GetAwaiter().GetResult();
+        if (value is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
 
     /// <summary>
     /// Releases the resources used by the current instance of the class, optionally disposing of managed resources.
@@ -295,11 +448,17 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
 
         if (disposing)
         {
-            _lruChannel.Writer.Complete();
-            if (_cts is { } cts)
+            _queries.Writer.Complete();
+            if (_cts is { })
             {
-                cts.Cancel();
-                cts.Dispose();
+                try
+                {
+                    _cts.Cancel();
+                }
+                finally
+                {
+                    _cts.Dispose();
+                }
             }
         }
 

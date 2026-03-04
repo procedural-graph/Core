@@ -23,7 +23,7 @@ public abstract class UnmanagedMemoryCache<TKey, TValue, TBase, TSource> : Concu
     private static readonly long _defaultCacheSize;
 
     /// <inheritdoc/>
-    public override long MaxSize { get; }
+    public override long MaxSizeKiB { get; }
 
     static UnmanagedMemoryCache()
     {
@@ -47,7 +47,7 @@ public abstract class UnmanagedMemoryCache<TKey, TValue, TBase, TSource> : Concu
     /// </remarks>
     public UnmanagedMemoryCache()
     {
-        MaxSize = _defaultCacheSize;
+        MaxSizeKiB = _defaultCacheSize;
     }
 
     /// <inheritdoc/>
@@ -56,10 +56,10 @@ public abstract class UnmanagedMemoryCache<TKey, TValue, TBase, TSource> : Concu
         return value.Length * sizeof(TValue);
     }
 
-    /// <inheritdoc cref="ConcurrentCache{TKey, TValue}.GetOrAddAsync(TKey, CancellationToken)"/>
-    public new async ValueTask<TBase> GetOrAddAsync(TKey key, CancellationToken cancellationToken = default)
+    /// <inheritdoc cref="ConcurrentCache{TKey, TValue}.GetOrAddAsync(TKey, ConcurrentCache{TKey, TValue}.FactoryDelegate, CancellationToken)"/>
+    public new async ValueTask<TBase> GetOrAddAsync(TKey key, FactoryDelegate factory, CancellationToken cancellationToken = default)
     {
-        TSource result = await base.GetOrAddAsync(key, cancellationToken);
+        TSource result = await base.GetOrAddAsync(key, factory, cancellationToken);
         return result.ShallowCopy();
     }
 }
