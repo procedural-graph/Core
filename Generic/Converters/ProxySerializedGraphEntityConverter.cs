@@ -48,22 +48,20 @@ public abstract class ProxySerializedGraphEntityConverter<TEntity, TModel, TScen
     /// The <typeparamref name="TSceneMember"/> to convert to an <typeparamref name="TEntity"/>. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    /// <param name="graph">The Procedural Graph instance that the node belongs to. Cannot be <see langword="null"/>.</param>
     /// <param name="model">The model representation to use for the conversion, or <see langword="null"/> if no model is available.</param>
     /// <param name="parent">
     /// The parent graph node to associate with the new entity, 
     /// or <see langword="null"/> if the entity has no parent.
     /// </param>
     /// <returns>The entity representation of the specified scene member.</returns>
-    protected abstract TEntity ToEntity(TSceneMember sceneMember, Graph<TKey, TValue> graph, TModel? model, IGraphNode? parent = null);
+    protected abstract TEntity ToEntity(TSceneMember sceneMember, TModel? model, IGraphNode? parent = null);
 
-    IGraphNode IGraphConverter.ToGraph(object obj, IGraph graph, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object obj, IGraphNode? parent)
     {
         try
         {
             TSceneMember typedSceneMember = obj as TSceneMember ?? throw new ArgumentException($"Must be of type {typeof(TSceneMember)}.", nameof(obj));
-            Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
-            return ToEntity(typedSceneMember, typedGraph, null, parent);
+            return ToEntity(typedSceneMember, null, parent);
         }
         catch (ArgumentException ex) when (obj is TModel)
         {
@@ -71,11 +69,10 @@ public abstract class ProxySerializedGraphEntityConverter<TEntity, TModel, TScen
         }
     }
 
-    IGraphNode IGraphConverter.ToGraph(object sceneMember, IGraph graph, object model, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object sceneMember, object model, IGraphNode? parent)
     {
         TSceneMember typedSceneMember = sceneMember as TSceneMember ?? throw new ArgumentException($"Must be of type {typeof(TSceneMember)}", nameof(sceneMember));
         TModel typedModel = model as TModel ?? throw new ArgumentException($"Must be of type {typeof(TModel)}", nameof(model));
-        Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
-        return ToEntity(typedSceneMember, typedGraph, typedModel, parent);
+        return ToEntity(typedSceneMember, typedModel, parent);
     }
 }

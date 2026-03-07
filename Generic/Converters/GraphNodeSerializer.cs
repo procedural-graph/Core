@@ -39,14 +39,12 @@ public abstract class GraphNodeSerializer<TKey, TValue, TNode, TModel> : GraphCo
     /// The <typeparamref name="TNode"/> to convert to an <typeparamref name="TModel"/>. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    /// <param name="graph">The Procedural Graph instance that the node belongs to. Cannot be <see langword="null"/>.</param>
     /// <returns>The model representation of the specified entity node.</returns>
-    protected abstract TModel ToModel(TNode node, Graph<TKey, TValue> graph);
+    protected abstract TModel ToModel(TNode node);
 
-    object IGraphConverter.ToModel(IGraphNode node, IGraph graph)
+    object IGraphConverter.ToModel(IGraphNode node)
     {
         TNode typedNode = node as TNode ?? throw new ArgumentException($"Must be of type {typeof(TNode)}.", nameof(node));
-        Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
-        return ToModel(typedNode, typedGraph);
+        return ToModel(typedNode);
     }
 }

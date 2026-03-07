@@ -38,13 +38,12 @@ public abstract class SerializedGraphEntityConverter<TEntity, TModel, TKey, TVal
     /// The <typeparamref name="TModel"/> to convert to an <typeparamref name="TEntity"/>. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    /// <param name="graph">The Procedural Graph instance that the node belongs to. Cannot be <see langword="null"/>.</param>
     /// <param name="parent">
     /// The parent graph node to associate with the new entity, 
     /// or <see langword="null"/> if the entity has no parent.
     /// </param>
     /// <returns>The entity representation of the specified model.</returns>
-    protected abstract TEntity ToEntity(TModel model, Graph<TKey, TValue> graph, IGraphNode? parent = null);
+    protected abstract TEntity ToEntity(TModel model, IGraphNode? parent = null);
 
     /// <summary>
     /// Converts the specified <typeparamref name="TEntity"/> to it's corresponding <typeparamref name="TModel"/> representation.
@@ -53,21 +52,18 @@ public abstract class SerializedGraphEntityConverter<TEntity, TModel, TKey, TVal
     /// The <typeparamref name="TEntity"/> to convert to an <typeparamref name="TModel"/>. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    /// <param name="graph">The Procedural Graph instance that the node belongs to. Cannot be <see langword="null"/>.</param>
     /// <returns>The model representation of the specified entity node.</returns>
-    protected abstract TModel ToModel(TEntity node, Graph<TKey, TValue> graph);
+    protected abstract TModel ToModel(TEntity node);
 
-    IGraphNode IGraphConverter.ToGraph(object obj, IGraph graph, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object obj, IGraphNode? parent)
     {
-        Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
         TModel typedModel = obj as TModel ?? throw new ArgumentException($"Must be of type {typeof(TModel)}.", nameof(obj));
-        return ToEntity(typedModel, typedGraph, parent);
+        return ToEntity(typedModel, parent);
     }
 
-    object IGraphConverter.ToModel(IGraphNode node, IGraph graph)
+    object IGraphConverter.ToModel(IGraphNode node)
     {
-        Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
         TEntity typedNode = node as TEntity ?? throw new ArgumentException($"Must be of type {typeof(TEntity)}.", nameof(node));
-        return ToModel(typedNode, typedGraph);
+        return ToModel(typedNode);
     }
 }

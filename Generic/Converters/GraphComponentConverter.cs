@@ -33,14 +33,13 @@ public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TValu
     /// The <typeparamref name="TModel"/> to convert to an <typeparamref name="TComponent"/>. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    /// <param name="graph">The Procedural Graph instance that the node belongs to. Cannot be <see langword="null"/>.</param>
     /// <param name="entity">
     /// The parent entity to associate with the new component.
     /// </param>
     /// <returns>The entity representation of the specified model.</returns>
-    protected abstract IGraphNode ToComponent(TModel model, Graph<TKey, TValue> graph, TEntity entity);
+    protected abstract TComponent ToComponent(TModel model, TEntity entity);
 
-    IGraphNode IGraphConverter.ToGraph(object obj, IGraph graph, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object obj, IGraphNode? parent)
     {
 #if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(parent, nameof(parent));
@@ -52,11 +51,10 @@ public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TValu
 #endif
         TEntity typedEntity = parent as TEntity ?? throw new ArgumentException($"Must be of type {typeof(TEntity)}.", nameof(parent));
         TModel typedModel = obj as TModel ?? throw new ArgumentException($"Must be of type {typeof(TModel)}.", nameof(obj));
-        Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
-        return ToComponent(typedModel, typedGraph, typedEntity);
+        return ToComponent(typedModel, typedEntity);
     }
 
-    IGraphNode IGraphConverter.ToGraph(object sceneMember, IGraph root, object model, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object sceneMember, object model, IGraphNode? parent)
     {
         throw new NotSupportedException($"Cannot create a component from a scene member.");
     }

@@ -42,19 +42,17 @@ public abstract class ProxyGraphEntityConverter<TEntity, TSceneMember, TKey, TVa
     /// The <typeparamref name="TSceneMember"/> to convert to an <typeparamref name="TEntity"/>. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    ///<param name="graph">The Procedural Graph instance that the node belongs to. Cannot be <see langword="null"/>.</param>
     /// <param name="parent">
     /// The parent graph node to associate with the new entity, 
     /// or <see langword="null"/> if the entity has no parent.
     /// </param>
     /// <returns>The entity representation of the specified scene member.</returns>
-    protected abstract TEntity ToEntity(TSceneMember sceneMember, Graph<TKey, TValue> graph, IGraphNode? parent = null);
+    protected abstract TEntity ToEntity(TSceneMember sceneMember, IGraphNode? parent = null);
 
-    IGraphNode IGraphConverter.ToGraph(object obj, IGraph graph, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object obj, IGraphNode? parent)
     {
         TSceneMember typedSceneMember = obj as TSceneMember ?? throw new ArgumentException($"Must be of type {typeof(TSceneMember)}.", nameof(obj));
-        Graph<TKey, TValue> typedGraph = graph as Graph<TKey, TValue> ?? throw new ArgumentException($"Must be of type {typeof(Graph<TKey, TValue>)}.", nameof(graph));
-        return ToEntity(typedSceneMember, typedGraph, parent);
+        return ToEntity(typedSceneMember, parent);
 
     }
 }

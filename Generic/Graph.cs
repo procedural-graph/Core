@@ -1,4 +1,5 @@
-﻿using ProceduralGraph.Collections;
+﻿using Microsoft.Extensions.DependencyInjection;
+using ProceduralGraph.Collections;
 using System;
 using System.Collections;
 using System.Collections.Concurrent;
@@ -18,7 +19,7 @@ namespace ProceduralGraph.Generic;
 /// elements.
 /// </summary>
 /// <inheritdoc/>
-public abstract class Graph<TKey, TValue> : 
+public sealed class Graph<TKey, TValue> : 
     LifecycleGraphNode<TKey, TValue>, 
     IGraphNode,
     IGraph,
@@ -29,17 +30,17 @@ public abstract class Graph<TKey, TValue> :
     /// <summary>
     /// Gets the collection of graph converters used to serialize and deserialize graph elements.
     /// </summary>
-    public abstract IGraphConverterProvider Converters { get; }
+    public IGraphConverterProvider Converters { get; }
 
     /// <summary>
     /// Gets the logger instance used to record diagnostic and operational messages for the current node.
     /// </summary>
-    public abstract ILogger Logger { get; }
+    public ILogger Logger { get; }
 
     /// <summary>
     /// Gets the provider that supplies information about scene members for the specified key and value types.
     /// </summary>
-    protected abstract ISceneMemberInfoProvider<TKey, TValue> SceneMemberInfoProvider { get; }
+    protected ISceneMemberInfoProvider<TKey, TValue> SceneMemberInfoProvider { get; }
 
     private ConcurrentDictionary<TValue, GraphEntity<TKey, TValue>>? _roots;
     ICollection<IGraphNode> IGraphNode.Descendants => (ICollection<IGraphNode>)_roots!.Values;
@@ -53,6 +54,8 @@ public abstract class Graph<TKey, TValue> :
     /// <inheritdoc/>
     public int Count => _roots!.Count;
 
+    private readonly IServiceProvider _serviceProvider;
+
     bool ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>.IsReadOnly => false;
 
     /// <summary>
@@ -65,6 +68,28 @@ public abstract class Graph<TKey, TValue> :
     {
         get => _roots![key];
         set => _roots![key] = value;
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the Graph class using the specified graph converter provider and service provider.
+    /// </summary>
+    /// <param name="converters">
+    /// The provider of graph converters used to handle conversion of graph data. 
+    /// Cannot be <see langword="null"/>.
+    /// </param>
+    /// <param name="serviceProvider">
+    /// The service provider used to resolve dependencies required by the Graph instance.
+    /// Cannot be <see langword="null"/>.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if <paramref name="converters"/> or <paramref name="serviceProvider"/> is <see langword="null"/>.
+    /// </exception>
+    public Graph(IGraphConverterProvider converters, IServiceProvider serviceProvider)
+    {
+        _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+        Converters = converters ?? throw new ArgumentNullException(nameof(converters));
+        SceneMemberInfoProvider = serviceProvider.GetRequiredService<ISceneMemberInfoProvider<TKey, TValue>>();
+        Logger = serviceProvider.GetRequiredService<ILogger>();
     }
 
     /// <inheritdoc/>

@@ -9,12 +9,12 @@ namespace ProceduralGraph.Generic.Converters;
 /// <typeparam name="T">The type of graph node being converted. Must implement <see cref="IGraphNode"/>.</typeparam>
 public abstract class GraphConverter<T> : GraphConverter, IGraphConverter where T : IGraphNode
 {
-    IGraphNode IGraphConverter.ToGraph(object sceneMember, IGraph root, object model, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object sceneMember, object model, IGraphNode? parent)
     {
         throw new NotSupportedException($"{typeof(T).FullName} does not support serialization.");
     }
 
-    object IGraphConverter.ToModel(IGraphNode node, IGraph root)
+    object IGraphConverter.ToModel(IGraphNode node)
     {
         throw new NotSupportedException($"{typeof(T).FullName} does not support serialization.");
     }
@@ -35,17 +35,17 @@ public abstract class GraphConverter : IGraphConverter
     /// <inheritdoc/>
     public virtual int CompareTo(IGraphConverter? other) => 0;
 
-    IGraphNode IGraphConverter.ToGraph(object obj, IGraph root, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object obj, IGraphNode? parent)
     {
         throw new NotImplementedException();
     }
 
-    IGraphNode IGraphConverter.ToGraph(object sceneMember, IGraph root, object model, IGraphNode? parent)
+    IGraphNode IGraphConverter.ToGraph(object sceneMember, object model, IGraphNode? parent)
     {
         throw new NotImplementedException();
     }
 
-    object IGraphConverter.ToModel(IGraphNode node, IGraph root)
+    object IGraphConverter.ToModel(IGraphNode node)
     {
         throw new NotImplementedException();
     }
