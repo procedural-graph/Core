@@ -11,33 +11,31 @@ namespace ProceduralGraph.Generic;
 /// <summary>
 /// Provides a breadth-first traversal of a graph starting from a specified root graph entity.
 /// </summary>
-/// <inheritdoc cref="LifecycleGraphNode{TKey, TValue}"/>
-public ref struct BreadthFirstTraversalEnumerator<TKey, TValue> : IEnumerator<GraphEntity<TKey, TValue>>
-    where TKey : struct, IEquatable<TKey>
-    where TValue : class
+/// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
+public ref struct BreadthFirstTraversalEnumerator<TSceneMember> : IEnumerator<GraphEntity<TSceneMember>> where TSceneMember : class
 {
-    private readonly GraphEntity<TKey, TValue> _root;
-    private GraphEntity<TKey, TValue>[]? _rentedArray;
+    private readonly GraphEntity<TSceneMember> _root;
+    private GraphEntity<TSceneMember>[]? _rentedArray;
     private int _head;
     private int _tail;
     private bool _completed;
-    private readonly Func<GraphEntity<TKey, TValue>[], ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>, int, int> _add;
+    private readonly Func<GraphEntity<TSceneMember>[], ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>, int, int> _add;
 
-    private GraphEntity<TKey, TValue>? _current;
+    private GraphEntity<TSceneMember>? _current;
 
     /// <inheritdoc/>
-    public readonly GraphEntity<TKey, TValue> Current => _current!;
+    public readonly GraphEntity<TSceneMember> Current => _current!;
     readonly object? IEnumerator.Current => Current;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="BreadthFirstTraversalEnumerator{TKey, TValue}"/> structure starting from the specified root graph entity.
+    /// Initializes a new instance of the <see cref="BreadthFirstTraversalEnumerator{TSceneMember}"/> structure starting from the specified root graph entity.
     /// </summary>
     /// <param name="root">The root graph entity from which the traversal begins. Cannot be <see langword="null"/>.</param>
     /// <param name="preordered">
     /// Determines whether to add children in a preordered manner (sorted by key) or in the order they are encountered. 
     /// Defaults to <see langword="true"/> for preordered traversal.
     /// </param>
-    public BreadthFirstTraversalEnumerator(GraphEntity<TKey, TValue> root, bool preordered = true)
+    public BreadthFirstTraversalEnumerator(GraphEntity<TSceneMember> root, bool preordered = true)
     {
 #if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(root);
@@ -47,7 +45,7 @@ public ref struct BreadthFirstTraversalEnumerator<TKey, TValue> : IEnumerator<Gr
             throw new ArgumentNullException(nameof(root));
         }
 #endif
-        _rentedArray = RentDefaultAllocationSize<GraphEntity<TKey, TValue>>();
+        _rentedArray = RentDefaultAllocationSize<GraphEntity<TSceneMember>>();
         _root = root;
         _add = preordered ? AddSortedChildren : AddChildren;
     }
@@ -65,7 +63,7 @@ public ref struct BreadthFirstTraversalEnumerator<TKey, TValue> : IEnumerator<Gr
             return true;
         }
 
-        if (TryGetNonZeroChildren(_current, out ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> children, out int childCount))
+        if (TryGetNonZeroChildren(_current, out ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>> children, out int childCount))
         {
             int currentSize = _tail - _head;
             int requiredCapacity = currentSize + childCount;
@@ -127,7 +125,7 @@ public ref struct BreadthFirstTraversalEnumerator<TKey, TValue> : IEnumerator<Gr
     {
         if (condition)
         {
-            throw new ObjectDisposedException(nameof(BreadthFirstTraversalEnumerator<,>));
+            throw new ObjectDisposedException(nameof(BreadthFirstTraversalEnumerator<>));
         }
     }
 }

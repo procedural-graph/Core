@@ -13,9 +13,7 @@ namespace ProceduralGraph.Generic;
 /// entities, enabling asynchronous generation and regeneration within a graph structure.
 /// </summary>
 /// <inheritdoc/>
-public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<TKey, TValue>, IGraphNode
-    where TKey : struct, IEquatable<TKey>
-    where TValue : class
+public abstract class GenerativeGraphEntity<TSceneMember> : GraphEntity<TSceneMember>, IGraphNode where TSceneMember : class
 {
     /// <summary>
     /// Represents a collection of all immediate descendant nodes, including both components and child entities, of
@@ -29,14 +27,14 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
         /// </summary>
         public struct Enumerator : IEnumerator<IGraphNode>
         {
-            private readonly GenerativeGraphEntity<TKey, TValue> _owner;
-            private readonly IEnumerator<GraphComponent<TKey, TValue>> _componentsEnumerator;
-            private readonly ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator _childrenEnumerator;
+            private readonly GenerativeGraphEntity<TSceneMember> _owner;
+            private readonly IEnumerator<GraphComponent<TSceneMember>> _componentsEnumerator;
+            private readonly ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>.Enumerator _childrenEnumerator;
             private IGraphNode? _current;
             /// <inheritdoc/>
             public readonly IGraphNode Current => _current!;
             readonly object IEnumerator.Current => Current;
-            internal Enumerator(GenerativeGraphEntity<TKey, TValue> owner)
+            internal Enumerator(GenerativeGraphEntity<TSceneMember> owner)
             {
                 _owner = owner;
                 _componentsEnumerator = owner.Components.GetEnumerator();
@@ -73,7 +71,7 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
             }
         }
 
-        private readonly GenerativeGraphEntity<TKey, TValue> _owner;
+        private readonly GenerativeGraphEntity<TSceneMember> _owner;
 
         /// <inheritdoc/>
         public int Count => _owner.Children.Count + _owner.Components.Count;
@@ -85,17 +83,17 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
         {
             switch (item)
             {
-                case GraphComponent<TKey, TValue> component: _owner.Components.Add(component); break;
-                case GraphEntity<TKey, TValue> entity: _owner.Children.Add(entity); break;
-                default: throw new ArgumentException($"Item must be of type {typeof(GraphComponent<TKey, TValue>).FullName} or {typeof(GraphEntity<TKey, TValue>).FullName}.", nameof(item));
+                case GraphComponent<TSceneMember> component: _owner.Components.Add(component); break;
+                case GraphEntity<TSceneMember> entity: _owner.Children.Add(entity); break;
+                default: throw new ArgumentException($"Item must be of type {typeof(GraphComponent<TSceneMember>).FullName} or {typeof(GraphEntity<TSceneMember>).FullName}.", nameof(item));
             }
         }
 
         /// <inheritdoc/>
         public bool Contains(IGraphNode item) => item switch
         {
-            GraphComponent<TKey, TValue> component => _owner.Components.Contains(component),
-            GraphEntity<TKey, TValue> entity => _owner.Children.Contains(entity),
+            GraphComponent<TSceneMember> component => _owner.Components.Contains(component),
+            GraphEntity<TSceneMember> entity => _owner.Children.Contains(entity),
             _ => false
         };
 
@@ -126,12 +124,12 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
         /// <inheritdoc/>
         public bool Remove(IGraphNode item) => item switch
         {
-            GraphComponent<TKey, TValue> component => _owner.Components.Remove(component),
-            GraphEntity<TKey, TValue> entity => _owner.Children.Remove(entity),
+            GraphComponent<TSceneMember> component => _owner.Components.Remove(component),
+            GraphEntity<TSceneMember> entity => _owner.Children.Remove(entity),
             _ => false
         };
 
-        internal DescendantCollection(GenerativeGraphEntity<TKey, TValue> owner)
+        internal DescendantCollection(GenerativeGraphEntity<TSceneMember> owner)
         {
             _owner = owner;
         }
@@ -166,11 +164,11 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
     private readonly DescendantCollection _descendants;
     ICollection<IGraphNode> IGraphNode.Descendants => _descendants;
 
-    private ConcurrentList<GraphComponent<TKey, TValue>>? _components;
+    private ConcurrentList<GraphComponent<TSceneMember>>? _components;
     /// <summary>
     /// Gets the collection of components associated with this graph entity.
     /// </summary>
-    public ConcurrentList<GraphComponent<TKey, TValue>> Components => _components!;
+    public ConcurrentList<GraphComponent<TSceneMember>> Components => _components!;
 
     private Task _componentEventHandler = Task.CompletedTask;
 
@@ -181,7 +179,7 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
     public override event Action? Regenerated;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="GenerativeGraphEntity{TKey, TValue}"/> class.
+    /// Initializes a new instance of the <see cref="GenerativeGraphEntity{TSceneMember}"/> class.
     /// </summary>
     public GenerativeGraphEntity() : base()
     {
@@ -214,7 +212,7 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
     /// Handles the addition of a new graph component to the entity.
     /// </summary>
     /// <param name="component">The graph component that has been added. Cannot be <see langword="null"/>.</param>
-    protected virtual void OnComponentAdded(GraphComponent<TKey, TValue> component)
+    protected virtual void OnComponentAdded(GraphComponent<TSceneMember> component)
     {
         component.StateChanged += OnStateChanged;
         OnStateChanged();
@@ -224,7 +222,7 @@ public abstract partial class GenerativeGraphEntity<TKey, TValue> : GraphEntity<
     /// Handles the removal of a graph component from the entity.
     /// </summary>
     /// <param name="component">The component that has been removed from the graph. Cannot be <see langword="null"/>.</param>
-    protected virtual void OnComponentRemoved(GraphComponent<TKey, TValue> component)
+    protected virtual void OnComponentRemoved(GraphComponent<TSceneMember> component)
     {
         component.StateChanged -= OnStateChanged;
         OnStateChanged();

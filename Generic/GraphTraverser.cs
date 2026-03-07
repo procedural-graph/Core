@@ -1,7 +1,6 @@
 ﻿using ProceduralGraph.Collections;
 using System;
 using System.Buffers;
-using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
@@ -9,12 +8,11 @@ namespace ProceduralGraph.Generic;
 
 internal static class GraphTraverser
 {
-    public static bool TryGetNonZeroChildren<TKey, TValue>(
-        GraphEntity<TKey, TValue> entity,
-        out ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> children,
+    public static bool TryGetNonZeroChildren<TSceneMember>(
+        GraphEntity<TSceneMember> entity,
+        out ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>> children,
         out int childCount)
-        where TKey : struct, IEquatable<TKey>
-        where TValue : class
+        where TSceneMember : class
     {
         children = entity.Children;
         childCount = children.Count;
@@ -41,25 +39,23 @@ internal static class GraphTraverser
         }
     }
 
-    public static int AddSortedChildren<TKey, TValue>(
-        GraphEntity<TKey, TValue>[] array,
-        ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> items,
+    public static int AddSortedChildren<TSceneMember>(
+        GraphEntity<TSceneMember>[] array,
+        ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>> items,
         int arrayIndex)
-        where TKey : struct, IEquatable<TKey>
-        where TValue : class
+        where TSceneMember : class
     {
         int copiedCount = items.CopyTo(array, arrayIndex);
-        Array.Sort(array, arrayIndex, copiedCount, GraphEntity<TKey, TValue>.comparer);
+        Array.Sort(array, arrayIndex, copiedCount, GraphEntity<TSceneMember>.comparer);
         return copiedCount;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static int AddChildren<TKey, TValue>(
-        GraphEntity<TKey, TValue>[] array,
-        ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> items,
+    public static int AddChildren<TSceneMember>(
+        GraphEntity<TSceneMember>[] array,
+        ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>> items,
         int arrayIndex)
-        where TKey : struct, IEquatable<TKey>
-        where TValue : class
+        where TSceneMember : class
     {
         return items.CopyTo(array, arrayIndex);
     }

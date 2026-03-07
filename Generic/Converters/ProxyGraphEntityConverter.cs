@@ -11,22 +11,17 @@ namespace ProceduralGraph.Generic.Converters;
 /// </summary>
 /// <typeparam name="TEntity">
 /// The type of graph entity being converted. Must derive from 
-/// <see cref="LifecycleGraphNode{TKey, TValue}"/> and implement <see cref="IProxyGraphNode{TValue}"/>.
+/// <see cref="LifecycleGraphNode{TSceneMember}"/> and implement <see cref="IProxyGraphNode{TValue}"/>.
 /// </typeparam>
 /// <typeparam name="TSceneMember">
 /// The engine-specific type of scene hierarchy member being converted. 
-/// Must derive from <typeparamref name="TValue"/>.
+/// Must derive from <typeparamref name="TBaseSceneMember"/>.
 /// </typeparam>
-/// <typeparam name="TKey">
-/// The type of the key used to identify scene members. Must be a value type that implements 
-/// <see cref="IEquatable{TKey}"/>.
-/// </typeparam>
-/// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-public abstract class ProxyGraphEntityConverter<TEntity, TSceneMember, TKey, TValue> : GraphConverter<TEntity>, IGraphConverter
-    where TEntity : LifecycleGraphNode<TKey, TValue>, IProxyGraphNode<TValue>
-    where TSceneMember : class, TValue
-    where TKey : struct, IEquatable<TKey>
-    where TValue : class
+/// <typeparam name="TBaseSceneMember">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
+public abstract class ProxyGraphEntityConverter<TEntity, TSceneMember, TBaseSceneMember> : GraphConverter<TEntity>, IGraphConverter
+    where TEntity : LifecycleGraphNode<TBaseSceneMember>, IProxyGraphNode<TBaseSceneMember>
+    where TSceneMember : class, TBaseSceneMember
+    where TBaseSceneMember : class
 {
     private static readonly ImmutableArray<Type> _supportedTypes = [typeof(TSceneMember), typeof(TEntity)];
     /// <inheritdoc/>

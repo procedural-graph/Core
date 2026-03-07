@@ -11,31 +11,30 @@ namespace ProceduralGraph.Generic;
 /// <summary>
 /// Provides a depth-first traversal of a graph starting from a specified root graph entity.
 /// </summary>
-public ref struct DepthFirstGraphTraverser<TKey, TValue> : IEnumerator<GraphEntity<TKey, TValue>>
-    where TKey : struct, IEquatable<TKey>
-    where TValue : class
+/// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
+public ref struct DepthFirstGraphTraverser<TSceneMember> : IEnumerator<GraphEntity<TSceneMember>> where TSceneMember : class
 {
-    private readonly GraphEntity<TKey, TValue> _root;
-    private GraphEntity<TKey, TValue>[]? _rentedArray;
+    private readonly GraphEntity<TSceneMember> _root;
+    private GraphEntity<TSceneMember>[]? _rentedArray;
     private int _count;
     private bool _completed;
-    private readonly Func<GraphEntity<TKey, TValue>[], ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>, int, int> _add;
+    private readonly Func<GraphEntity<TSceneMember>[], ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>, int, int> _add;
 
-    private GraphEntity<TKey, TValue>? _current;
+    private GraphEntity<TSceneMember>? _current;
 
     /// <inheritdoc/>
-    public readonly GraphEntity<TKey, TValue> Current => _current!;
+    public readonly GraphEntity<TSceneMember> Current => _current!;
     readonly object? IEnumerator.Current => Current;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="DepthFirstGraphTraverser{TKey, TValue}"/> structure starting from the specified root graph entity.
+    /// Initializes a new instance of the <see cref="DepthFirstGraphTraverser{TSceneMember}"/> structure starting from the specified root graph entity.
     /// </summary>
     /// <param name="root">The root graph entity from which the traversal begins. Cannot be <see langword="null"/>.</param>
     /// <param name="preordered">
     /// Determines whether to add children in a preordered manner (sorted by key) or in the order they are encountered. 
     /// Defaults to <see langword="true"/> for preordered traversal.
     /// </param>
-    public DepthFirstGraphTraverser(GraphEntity<TKey, TValue> root, bool preordered = true)
+    public DepthFirstGraphTraverser(GraphEntity<TSceneMember> root, bool preordered = true)
     {
 #if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(root);
@@ -45,7 +44,7 @@ public ref struct DepthFirstGraphTraverser<TKey, TValue> : IEnumerator<GraphEnti
             throw new ArgumentNullException(nameof(root));
         }
 #endif
-        _rentedArray = RentDefaultAllocationSize<GraphEntity<TKey, TValue>>();
+        _rentedArray = RentDefaultAllocationSize<GraphEntity<TSceneMember>>();
         _root = root;
         _add = preordered ? AddSortedChildren : AddChildren;
     }
@@ -66,7 +65,7 @@ public ref struct DepthFirstGraphTraverser<TKey, TValue> : IEnumerator<GraphEnti
             return true;
         }
 
-        if (TryGetNonZeroChildren(_current, out ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> children, out int childCount))
+        if (TryGetNonZeroChildren(_current, out ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>> children, out int childCount))
         {
             int newCount = _count + childCount;
             if (newCount > _rentedArray.Length)
@@ -111,7 +110,7 @@ public ref struct DepthFirstGraphTraverser<TKey, TValue> : IEnumerator<GraphEnti
     {
         if (condition)
         {
-            throw new ObjectDisposedException(nameof(DepthFirstGraphTraverser<,>));
+            throw new ObjectDisposedException(nameof(DepthFirstGraphTraverser<>));
         }
     }
 }

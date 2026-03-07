@@ -1,6 +1,7 @@
 ﻿using ProceduralGraph.Collections;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
@@ -13,16 +14,11 @@ namespace ProceduralGraph.Generic;
 /// and lifecycle management.
 /// </summary>
 /// <inheritdoc/>
-public abstract class GraphEntity<TKey, TValue> : 
-    LifecycleGraphNode<TKey, TValue>, 
-    IEquatable<GraphEntity<TKey, TValue>>,
-    IGraphNode
-    where TKey : struct, IEquatable<TKey>
-    where TValue : class
+public abstract class GraphEntity<TSceneMember> : LifecycleGraphNode<TSceneMember>, IGraphNode where TSceneMember : class
 {
-    internal sealed class Comparer : IComparer<GraphEntity<TKey, TValue>>
+    internal sealed class Comparer : IComparer<GraphEntity<TSceneMember>>
     {
-        public int Compare(GraphEntity<TKey, TValue>? x, GraphEntity<TKey, TValue>? y)
+        public int Compare(GraphEntity<TSceneMember>? x, GraphEntity<TSceneMember>? y)
         {
             return Comparer<Guid?>.Default.Compare(x?.ID, y?.ID);
         }
@@ -31,7 +27,7 @@ public abstract class GraphEntity<TKey, TValue> :
     /// <summary>
     /// Represents the base type for all entity models in a graph structure.
     /// </summary>
-    public abstract record Model : GraphComponent<TKey, TValue>.Model
+    public abstract record Model : GraphComponent<TSceneMember>.Model
     {
         /// <summary>
         /// Gets the unique identifier of the entity associated with this model.
@@ -41,17 +37,17 @@ public abstract class GraphEntity<TKey, TValue> :
         /// <summary>
         /// Attempts to retrieve the unique identifier of the scene member associated with this graph entity model.
         /// </summary>
-        /// <param name="id">
-        /// When the method returns <see langword="true"/>, contains the identifier of the scene member; otherwise,
-        /// contains the default value for <typeparamref name="TKey"/>.
+        /// <param name="sceneMember">
+        /// When the method returns <see langword="true"/>, contains the scene member; otherwise, 
+        /// <see langword="null"/>.
         /// </param>
         /// <returns>
         /// <see langword="true"/> if this model has an associated scene member identifier; 
         /// otherwise, <see langword="false"/>.
         /// </returns>
-        public virtual bool TryGetSceneMemberIdentity(out TKey id)
+        public virtual bool TryGetSceneMember([NotNullWhen(true)] out TSceneMember? sceneMember)
         {
-            id = default;
+            sceneMember = default;
             return false;
         }
     }
@@ -66,15 +62,15 @@ public abstract class GraphEntity<TKey, TValue> :
     /// <summary>
     /// Gets the graph this entity belongs to.
     /// </summary>
-    protected abstract Graph<TKey, TValue> Graph { get; }
+    protected abstract Graph<TSceneMember> Graph { get; }
 
     /// <inheritdoc cref="IGraphNode.Parent"/>
-    public abstract GraphEntity<TKey, TValue>? Parent { get; }
+    public abstract GraphEntity<TSceneMember>? Parent { get; }
     IGraphNode? IGraphNode.Parent => Parent;
 
-    private ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>? _children;
+    private ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>? _children;
     /// <inheritdoc cref="IGraphNode.Descendants"/>
-    public ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> Children => _children!;
+    public ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>> Children => _children!;
     ICollection<IGraphNode> IGraphNode.Descendants => (ICollection<IGraphNode>)_children!;
 
     private Task _childEventHandling = Task.CompletedTask;
@@ -100,7 +96,7 @@ public abstract class GraphEntity<TKey, TValue> :
         CancellationToken parentStoppingToken = Parent?.StoppingToken ?? CancellationToken.None;
         CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, parentStoppingToken);
 
-        _children = new ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>(SceneMemberIdentity);
+        _children = new ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>(GetSceneMember);
         _childEventHandling = HandleCollectionEventsAsync(_children, OnChildAdded, OnChildRemoved, Graph.Logger, cts.Token);
 
         return cts;
@@ -129,7 +125,7 @@ public abstract class GraphEntity<TKey, TValue> :
     /// Handles logic to be performed when a child entity is added to the graph.
     /// </summary>
     /// <param name="child">The child entity that has been added. Cannot be <see langword="null"/>.</param>
-    protected virtual void OnChildAdded(GraphEntity<TKey, TValue> child)
+    protected virtual void OnChildAdded(GraphEntity<TSceneMember> child)
     {
         child.Regenerated += OnStateChanged;
         OnStateChanged();
@@ -139,7 +135,7 @@ public abstract class GraphEntity<TKey, TValue> :
     /// Handles logic to be performed when a child entity is removed from the graph.
     /// </summary>
     /// <param name="child">The child entity that has been removed. Cannot be <see langword="null"/>.</param>
-    protected virtual void OnChildRemoved(GraphEntity<TKey, TValue> child)
+    protected virtual void OnChildRemoved(GraphEntity<TSceneMember> child)
     {
         child.Regenerated -= OnStateChanged;
         OnStateChanged();
@@ -154,27 +150,20 @@ public abstract class GraphEntity<TKey, TValue> :
     }
 
     /// <summary>
-    /// Retrieves the unique identifier of the scene member associated with this graph entity.
+    /// Retrieves the scene member associated with this graph entity.
     /// </summary>
     /// <returns>
-    /// The <typeparamref name="TKey"/> of the scene member associated with this graph entity, 
-    /// or the default value of <typeparamref name="TKey"/> if not applicable.
+    /// The scene member associated with this graph entity, or <see langword="null"/> if there is no associated scene member.
     /// </returns>
-    protected virtual TKey SceneMemberIdentity()
+    protected virtual TSceneMember? GetSceneMember()
     {
-        return default;
-    }
-
-    /// <inheritdoc/>
-    public bool Equals(GraphEntity<TKey, TValue>? other)
-    {
-        return ReferenceEquals(this, other) || other is { } && other.ID == ID;
+        return null;
     }
 
     /// <inheritdoc/>
     public override bool Equals(object? obj)
     {
-        return obj is GraphEntity<TKey, TValue> other && Equals(other);
+        return ReferenceEquals(this, obj) || (obj is GraphEntity<TSceneMember> other && other.ID == ID);
     }
 
     /// <inheritdoc/>
@@ -218,9 +207,9 @@ public abstract class GraphEntity<TKey, TValue> :
         }
     }
 
-    internal static TKey SceneMemberIdentity(GraphEntity<TKey, TValue> entity)
+    internal static TSceneMember? GetSceneMember(GraphEntity<TSceneMember> entity)
     {
-        return entity.SceneMemberIdentity();
+        return entity.GetSceneMember();
     }
 
     /// <inheritdoc/>
@@ -233,10 +222,10 @@ public abstract class GraphEntity<TKey, TValue> :
             return;
         }
 
-        using ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator enumerator = _children.GetEnumerator();
+        using ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>.Enumerator enumerator = _children.GetEnumerator();
         while (enumerator.MoveNext())
         {
-            GraphEntity<TKey, TValue> current = enumerator.Current;
+            GraphEntity<TSceneMember> current = enumerator.Current;
             Task currentLifetime = current.Lifetime;
 
             if (currentLifetime.IsCompleted)

@@ -8,17 +8,13 @@ namespace ProceduralGraph.Generic.Converters;
 /// Represents a base implementation of an entity converter that provides mechanisms for converting between, 
 /// graph entities and model representations within a graph structure.
 /// </summary>
-/// <typeparam name="TEntity">The type of graph entity being converted. Must derive from <see cref="LifecycleGraphNode{TKey, TValue}"/>.</typeparam>
+/// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
+/// <typeparam name="TEntity">The type of graph entity being converted. Must derive from <see cref="LifecycleGraphNode{TSceneMember}"/>.</typeparam>
 /// <typeparam name="TModel">The type of the model representation used for serialization and deserialization. Must be a reference type.</typeparam>
-/// <typeparam name="TKey">
-/// The type of the key used to identify scene members. Must be a value type that implements 
-/// <see cref="IEquatable{TKey}"/>.
-/// </typeparam>
-/// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-public abstract class SerializedGraphEntityConverter<TEntity, TModel, TKey, TValue> : GraphConverter, IGraphConverter 
-    where TEntity : LifecycleGraphNode<TKey, TValue>
-    where TKey : struct, IEquatable<TKey>
-    where TValue : class
+/// <typeparam name="TSceneMember"/>
+public abstract class SerializedGraphEntityConverter<TEntity, TModel, TSceneMember> : GraphConverter, IGraphConverter 
+    where TEntity : LifecycleGraphNode<TSceneMember>
+    where TSceneMember : class
     where TModel : class
 {
     private static readonly ImmutableArray<Type> _supportedTypes = [typeof(TEntity), typeof(TModel)];

@@ -3,6 +3,8 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Threading;
 
 namespace ProceduralGraph.Collections;
@@ -15,9 +17,9 @@ namespace ProceduralGraph.Collections;
 /// <typeparam name="TItem">The type of items stored in the collection.</typeparam>
 public partial class ConcurrentGroupedCollection<TKey, TItem> : 
     ConcurrentCollection<TItem, ConcurrentGroupedCollection<TKey, TItem>.Enumerator>,
-    IReadOnlyDictionary<TKey, ImmutableHashSet<TItem>>,
+    IReadOnlyDictionary<object, ImmutableHashSet<TItem>>,
     ICollection<TItem> 
-    where TKey : notnull
+    where TKey : class
 {
     /// <summary>
     /// Enumerates the elements contained within a collection of immutable hash sets.
@@ -77,30 +79,37 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
         }
     }
 
-    private readonly Func<TItem, TKey> _keySelector;
-    private readonly ConcurrentDictionary<TKey, ImmutableHashSet<TItem>> _items;
+    private readonly Func<TItem, TKey?> _keySelector;
+    private readonly ConcurrentDictionary<object, ImmutableHashSet<TItem>> _items;
 
     private int _count;
     /// <inheritdoc/>
     public override int Count => _count;
 
     /// <inheritdoc/>
-    public IEnumerable<TKey> Keys => _items.Keys;
+    public IEnumerable<TKey> Keys => _items.Keys.OfType<TKey>();
+    IEnumerable<object> IReadOnlyDictionary<object, ImmutableHashSet<TItem>>.Keys => _items.Keys;
+
+    IEnumerable<ImmutableHashSet<TItem>> IReadOnlyDictionary<object, ImmutableHashSet<TItem>>.Values => _items.Values;
 
     bool ICollection<TItem>.IsReadOnly => false;
 
+    ImmutableHashSet<TItem> IReadOnlyDictionary<object, ImmutableHashSet<TItem>>.this[object key] => throw new NotImplementedException();
+
     /// <inheritdoc/>
-    public ImmutableHashSet<TItem> this[TKey key] => _items[key];
+    public ImmutableHashSet<TItem> this[TKey? key] => _items[key ?? _defaultKey];
+
+    private readonly static object _defaultKey = new();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ConcurrentGroupedCollection{TKey, TItem}"/> class using the specified key selector
     /// function.
     /// </summary>
     /// <param name="keySelector">A function that extracts the grouping key from each item. Cannot be <see langword="null"/>.</param>
-    public ConcurrentGroupedCollection(Func<TItem, TKey> keySelector)
+    public ConcurrentGroupedCollection(Func<TItem, TKey?> keySelector)
     {
         ThrowHelpers.ThrowIf(keySelector is null, nameof(keySelector), ThrowHelpers.CreateArgumentNullException);
-        _items = new ConcurrentDictionary<TKey, ImmutableHashSet<TItem>>();
+        _items = new ConcurrentDictionary<object, ImmutableHashSet<TItem>>();
         _keySelector = keySelector;
     }
 
@@ -132,11 +141,11 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// an empty set.
     /// </param>
     /// <returns><see langword="true"/> if the key was found and its items were removed; otherwise, <see langword="false"/>.</returns>
-    public bool Remove(TKey key, out ImmutableHashSet<TItem> items)
+    public bool Remove(TKey? key, out ImmutableHashSet<TItem> items)
     {
         ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
 
-        if (_items.TryRemove(key, out ImmutableHashSet<TItem>? value))
+        if (_items.TryRemove(key ?? _defaultKey, out ImmutableHashSet<TItem>? value))
         {
             items = value;
 
@@ -160,7 +169,7 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
         ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
         ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
 
-        TKey key = _keySelector(item);
+        object key = _keySelector(item) ?? _defaultKey;
 
         ImmutableHashSet<TItem>? currentSet, computedSet;
         do
@@ -181,8 +190,8 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
 
         if (computedSet.IsEmpty)
         {
-            var kvp = new KeyValuePair<TKey, ImmutableHashSet<TItem>>(key, computedSet);
-            return ((ICollection<KeyValuePair<TKey, ImmutableHashSet<TItem>>>)_items).Remove(kvp);
+            var kvp = new KeyValuePair<object, ImmutableHashSet<TItem>>(key, computedSet);
+            return ((ICollection<KeyValuePair<object, ImmutableHashSet<TItem>>>)_items).Remove(kvp);
         }
 
         Interlocked.Decrement(ref _count);
@@ -193,22 +202,22 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     }
 
     /// <inheritdoc/>
-    public bool TryGetValue(TKey key, out ImmutableHashSet<TItem> value)
+    public bool TryGetValue(TKey? key, out ImmutableHashSet<TItem> value)
     {
-        if (_items.TryGetValue(key, out ImmutableHashSet<TItem>? result))
+        if (_items.TryGetValue(key ?? _defaultKey, out ImmutableHashSet<TItem>? result))
         {
             value = result;
             return true;
         }
 
-        value = ImmutableHashSet<TItem>.Empty;
+        value = [];
         return false;
     }
 
     /// <inheritdoc/>
-    public bool ContainsKey(TKey key)
+    public bool ContainsKey(TKey? key)
     {
-        return _items.ContainsKey(key);
+        return _items.ContainsKey(key ?? _defaultKey);
     }
 
     /// <inheritdoc/>
@@ -216,7 +225,7 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     {
         ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
 
-        TKey key = _keySelector(item);
+        object key = _keySelector(item) ?? _defaultKey;
 
         if (_items.TryGetValue(key, out ImmutableHashSet<TItem>? items))
         {
@@ -251,7 +260,7 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
         ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
         ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
 
-        TKey key = _keySelector(item);
+        object key = _keySelector(item) ?? _defaultKey;
 
         while (true)
         {
@@ -313,10 +322,24 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
         }
     }
 
-    IEnumerator<KeyValuePair<TKey, ImmutableHashSet<TItem>>> IEnumerable<KeyValuePair<TKey, ImmutableHashSet<TItem>>>.GetEnumerator()
+    IEnumerator<KeyValuePair<object, ImmutableHashSet<TItem>>> IEnumerable<KeyValuePair<object, ImmutableHashSet<TItem>>>.GetEnumerator()
     {
         return _items.GetEnumerator();
     }
 
-    IEnumerable<ImmutableHashSet<TItem>> IReadOnlyDictionary<TKey, ImmutableHashSet<TItem>>.Values => _items.Values;
+    bool IReadOnlyDictionary<object, ImmutableHashSet<TItem>>.ContainsKey(object key)
+    {
+        return _items.ContainsKey(key);
+    }
+
+    bool IReadOnlyDictionary<object, ImmutableHashSet<TItem>>.TryGetValue(object key, [NotNull] out ImmutableHashSet<TItem>? value)
+    {
+        if (_items.TryGetValue(key, out value))
+        {
+            return true;
+        }
+
+        value = [];
+        return false;
+    }
 }

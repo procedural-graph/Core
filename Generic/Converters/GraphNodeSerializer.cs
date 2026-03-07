@@ -7,22 +7,18 @@ namespace ProceduralGraph.Generic.Converters;
 /// Provides an abstract base class for converting between graph node entities and their corresponding model
 /// representations.
 /// </summary>
-/// <typeparam name="TKey">
-/// The type of the key used to identify scene members. Must be a value type that implements 
-/// <see cref="IEquatable{TKey}"/>.
-/// </typeparam>
-/// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
+/// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
+/// <typeparam name="TSceneMember"/>
 /// <typeparam name="TNode">
 /// The type of the graph node to be converted. 
-/// Must derive from <see cref="GraphEntity{TKey, TValue}"/>.
+/// Must derive from <see cref="GraphEntity{TSceneMember}"/>.
 /// </typeparam>
 /// <typeparam name="TModel">
 /// The type of the model representation corresponding to the graph node. 
-/// Must derive from <see cref="GraphEntity{TKey, TValue}.Model"/>.
+/// Must derive from <see cref="GraphEntity{TSceneMember}.Model"/>.
 /// </typeparam>
-public abstract class GraphNodeSerializer<TKey, TValue, TNode, TModel> : GraphConverter<TNode>, IGraphConverter
-    where TKey : struct, IEquatable<TKey>
-    where TValue : class
+public abstract class GraphNodeSerializer<TSceneMember, TNode, TModel> : GraphConverter<TNode>, IGraphConverter
+    where TSceneMember : class
     where TNode : class, IGraphNode
     where TModel : class
 {

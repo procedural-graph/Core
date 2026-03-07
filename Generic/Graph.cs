@@ -19,13 +19,12 @@ namespace ProceduralGraph.Generic;
 /// elements.
 /// </summary>
 /// <inheritdoc/>
-public sealed class Graph<TKey, TValue> : 
-    LifecycleGraphNode<TKey, TValue>, 
+public sealed class Graph<TSceneMember> : 
+    LifecycleGraphNode<TSceneMember>, 
     IGraphNode,
     IGraph,
-    IDictionary<TValue, GraphEntity<TKey, TValue>> 
-    where TKey : struct, IEquatable<TKey> 
-    where TValue : class
+    IDictionary<TSceneMember, GraphEntity<TSceneMember>> 
+    where TSceneMember : class
 {
     /// <summary>
     /// Gets the collection of graph converters used to serialize and deserialize graph elements.
@@ -37,34 +36,31 @@ public sealed class Graph<TKey, TValue> :
     /// </summary>
     public ILogger Logger { get; }
 
-    /// <summary>
-    /// Gets the provider that supplies information about scene members for the specified key and value types.
-    /// </summary>
-    protected ISceneMemberInfoProvider<TKey, TValue> SceneMemberInfoProvider { get; }
+    private readonly ISceneMemberInfoProvider<TSceneMember> _sceneMemberInfoProvider;
 
-    private ConcurrentDictionary<TValue, GraphEntity<TKey, TValue>>? _roots;
+    private ConcurrentDictionary<TSceneMember, GraphEntity<TSceneMember>>? _roots;
     ICollection<IGraphNode> IGraphNode.Descendants => (ICollection<IGraphNode>)_roots!.Values;
 
     /// <inheritdoc/>
-    public ICollection<TValue> Keys => _roots!.Keys;
+    public ICollection<TSceneMember> Keys => _roots!.Keys;
 
     /// <inheritdoc/>
-    public ICollection<GraphEntity<TKey, TValue>> Values => _roots!.Values;
+    public ICollection<GraphEntity<TSceneMember>> Values => _roots!.Values;
 
     /// <inheritdoc/>
     public int Count => _roots!.Count;
 
     private readonly IServiceProvider _serviceProvider;
 
-    bool ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>.IsReadOnly => false;
+    bool ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>.IsReadOnly => false;
 
     /// <summary>
     /// Gets the graph entity associated with the specified key.
     /// </summary>
     /// <param name="key">The key used to locate the graph entity. Cannot be <see langword="null"/>.</param>
     /// <returns>The graph entity corresponding to the specified key.</returns>
-    public GraphEntity<TKey, TValue> this[TValue key] => _roots![key];
-    GraphEntity<TKey, TValue> IDictionary<TValue, GraphEntity<TKey, TValue>>.this[TValue key]
+    public GraphEntity<TSceneMember> this[TSceneMember key] => _roots![key];
+    GraphEntity<TSceneMember> IDictionary<TSceneMember, GraphEntity<TSceneMember>>.this[TSceneMember key]
     {
         get => _roots![key];
         set => _roots![key] = value;
@@ -88,7 +84,7 @@ public sealed class Graph<TKey, TValue> :
     {
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         Converters = converters ?? throw new ArgumentNullException(nameof(converters));
-        SceneMemberInfoProvider = serviceProvider.GetRequiredService<ISceneMemberInfoProvider<TKey, TValue>>();
+        _sceneMemberInfoProvider = serviceProvider.GetRequiredService<ISceneMemberInfoProvider<TSceneMember>>();
         Logger = serviceProvider.GetRequiredService<ILogger>();
     }
 
@@ -102,7 +98,7 @@ public sealed class Graph<TKey, TValue> :
     /// <inheritdoc/>
     protected override CancellationTokenSource BuildCancellationTokenSource(CancellationToken stoppingToken)
     {
-        _roots = new ConcurrentDictionary<TValue, GraphEntity<TKey, TValue>>();
+        _roots = new ConcurrentDictionary<TSceneMember, GraphEntity<TSceneMember>>();
         return base.BuildCancellationTokenSource(stoppingToken);
     }
 
@@ -115,10 +111,10 @@ public sealed class Graph<TKey, TValue> :
     /// succeeded; otherwise, <see langword="null"/>. This parameter is passed uninitialized.
     /// </param>
     /// <returns><see langword="true"/> if the scene member was successfully added to the graph or already exists; otherwise, <see langword="false"/>.</returns>
-    public bool Add(TValue sceneMember, out GraphEntity<TKey, TValue>? entity)
+    public bool Add(TSceneMember sceneMember, out GraphEntity<TSceneMember>? entity)
     {
-        TValue sceneMemberRoot = SceneMemberInfoProvider.GetRoot(sceneMember);
-        if (!TryGetOrAddRoot(sceneMemberRoot, out GraphEntity<TKey, TValue>? rootEntity))
+        TSceneMember sceneMemberRoot = _sceneMemberInfoProvider.GetRoot(sceneMember);
+        if (!TryGetOrAddRoot(sceneMemberRoot, out GraphEntity<TSceneMember>? rootEntity))
         {
             entity = null;
             return false;
@@ -140,7 +136,7 @@ public sealed class Graph<TKey, TValue> :
         return false;
     }
 
-    private bool TryGetOrAddRoot(TValue sceneRoot, [NotNullWhen(true)] out GraphEntity<TKey, TValue>? entity)
+    private bool TryGetOrAddRoot(TSceneMember sceneRoot, [NotNullWhen(true)] out GraphEntity<TSceneMember>? entity)
     {
         if (!Converters.TryFind(sceneRoot, out IGraphConverter? converter))
         {
@@ -148,7 +144,7 @@ public sealed class Graph<TKey, TValue> :
             return false;
         }
 
-        ConcurrentDictionary<TValue, GraphEntity<TKey, TValue>> roots = _roots!;
+        ConcurrentDictionary<TSceneMember, GraphEntity<TSceneMember>> roots = _roots!;
 
         do
         {
@@ -162,7 +158,7 @@ public sealed class Graph<TKey, TValue> :
                 continue;
             }
 
-            entity = converter.ToGraph(sceneRoot, this, null) as GraphEntity<TKey, TValue>;
+            entity = converter.ToGraph(sceneRoot, this, null) as GraphEntity<TSceneMember>;
             if (entity is null)
             {
                 return false;
@@ -175,24 +171,24 @@ public sealed class Graph<TKey, TValue> :
         return true;
     }
 
-    private GraphEntity<TKey, TValue>? InsertAsEntity(TValue sceneMember, GraphEntity<TKey, TValue> rootEntity, IGraphConverter converter)
+    private GraphEntity<TSceneMember>? InsertAsEntity(TSceneMember sceneMember, GraphEntity<TSceneMember> rootEntity, IGraphConverter converter)
     {
         CancellationToken stoppingToken = rootEntity.StoppingToken;
-        TValue parentSceneMember = SceneMemberInfoProvider.GetParent(sceneMember)!;
-        using BreadthFirstTraversalEnumerator<TKey, TValue> enumerator = new(rootEntity);
+        TSceneMember parentSceneMember = _sceneMemberInfoProvider.GetParent(sceneMember)!;
+        using BreadthFirstTraversalEnumerator<TSceneMember> enumerator = new(rootEntity);
         while (enumerator.MoveNext())
         {
             stoppingToken.ThrowIfCancellationRequested();
 
-            GraphEntity<TKey, TValue> current = enumerator.Current;
-            TKey currentSceneMemberID = GraphEntity<TKey, TValue>.SceneMemberIdentity(current);
+            GraphEntity<TSceneMember> current = enumerator.Current;
+            TSceneMember? currentSceneMember = GraphEntity<TSceneMember>.GetSceneMember(current);
 
-            if (!SceneMemberInfoProvider.Equals(currentSceneMemberID, parentSceneMember))
+            if (!_sceneMemberInfoProvider.Equals(currentSceneMember, parentSceneMember))
             {
                 continue;
             }
 
-            if (converter.ToGraph(sceneMember, this, current) is GraphEntity<TKey, TValue> entity)
+            if (converter.ToGraph(sceneMember, this, current) is GraphEntity<TSceneMember> entity)
             {
                 current.Children.Add(entity);
                 entity.Start(StoppingToken);
@@ -206,17 +202,17 @@ public sealed class Graph<TKey, TValue> :
     }
 
     /// <inheritdoc/>
-    public bool Remove(TValue item)
+    public bool Remove(TSceneMember item)
     {
-        ConcurrentDictionary<TValue, GraphEntity<TKey, TValue>> roots = _roots!;
+        ConcurrentDictionary<TSceneMember, GraphEntity<TSceneMember>> roots = _roots!;
 
-        TValue sceneRoot = SceneMemberInfoProvider.GetRoot(item);
-        if (!roots.TryGetValue(sceneRoot, out GraphEntity<TKey, TValue>? rootEntity))
+        TSceneMember sceneRoot = _sceneMemberInfoProvider.GetRoot(item);
+        if (!roots.TryGetValue(sceneRoot, out GraphEntity<TSceneMember>? rootEntity))
         {
             return false;
         }
 
-        if (!TryFindParent(sceneRoot, rootEntity, out GraphEntity<TKey, TValue>? parentEntity))
+        if (!TryFindParent(sceneRoot, rootEntity, out GraphEntity<TSceneMember>? parentEntity))
         {
             return false;
         }
@@ -227,47 +223,42 @@ public sealed class Graph<TKey, TValue> :
             return true;
         }
 
-        TKey sceneMemberID = SceneMemberInfoProvider.GetKey(item);
-
-        if (parentEntity.Children.Remove(sceneMemberID, out ImmutableHashSet<GraphEntity<TKey, TValue>>? items))
+        if (parentEntity.Children.Remove(item, out ImmutableHashSet<GraphEntity<TSceneMember>>? items))
         {
-            using ImmutableHashSet<GraphEntity<TKey, TValue>>.Enumerator enumerator = items.GetEnumerator();
-            while (enumerator.MoveNext())
+            foreach (GraphEntity<TSceneMember> entity in items)
             {
-                StopAndDispose(enumerator.Current);
+                StopAndDispose(entity);
             }
         }
 
         return false;
     }
 
-    private void StopAndDispose(GraphEntity<TKey, TValue> entity)
+    private void StopAndDispose(GraphEntity<TSceneMember> entity)
     {
         ValueTask stopAndDispose = StopAndDisposeAsync(entity, CancellationToken.None);
         stopAndDispose.Forget(Logger, entity, CancellationToken.None);
     }
 
-    private bool TryFindParent(TValue sceneMember, GraphEntity<TKey, TValue> rootEntity, [NotNullWhen(true)] out GraphEntity<TKey, TValue>? parentEntity)
+    private bool TryFindParent(TSceneMember sceneMember, GraphEntity<TSceneMember> rootEntity, [NotNullWhen(true)] out GraphEntity<TSceneMember>? parentEntity)
     {
-        TValue? parent = SceneMemberInfoProvider.GetParent(sceneMember);
-        TKey parentKey = parent is { } ? SceneMemberInfoProvider.GetKey(parent) : default;
-
-        using BreadthFirstTraversalEnumerator<TKey, TValue> enumerator = new(rootEntity);
+        TSceneMember? parent = _sceneMemberInfoProvider.GetParent(sceneMember);
+        using BreadthFirstTraversalEnumerator<TSceneMember> enumerator = new(rootEntity);
         while (enumerator.MoveNext())
         {
-            GraphEntity<TKey, TValue> current = enumerator.Current;
+            GraphEntity<TSceneMember> current = enumerator.Current;
 
-            if (current is IProxyGraphNode<TValue> proxyNode)
+            if (current is IProxyGraphNode<TSceneMember> proxyNode)
             {
-                TValue? currentParent = SceneMemberInfoProvider.GetParent(proxyNode.SceneMember);
-                if (SceneMemberInfoProvider.Equals(currentParent, parent))
+                TSceneMember? currentParent = _sceneMemberInfoProvider.GetParent(proxyNode.SceneMember);
+                if (_sceneMemberInfoProvider.Equals(currentParent, parent))
                 {
                     parentEntity = current;
                     return true;
                 }
             }
 
-            if (current.Children.TryGetValue(parentKey, out var results))
+            if (current.Children.TryGetValue(parent, out var results))
             {
                 parentEntity = results.FirstOrDefault();
                 return parentEntity is { };
@@ -278,7 +269,7 @@ public sealed class Graph<TKey, TValue> :
         return false;
     }
 
-    private static async ValueTask StopAndDisposeAsync(GraphEntity<TKey, TValue> entity, CancellationToken cancellationToken)
+    private static async ValueTask StopAndDisposeAsync(GraphEntity<TSceneMember> entity, CancellationToken cancellationToken)
     {
         try
         {
@@ -292,13 +283,13 @@ public sealed class Graph<TKey, TValue> :
     }
 
     /// <inheritdoc/>
-    public bool ContainsKey(TValue key)
+    public bool ContainsKey(TSceneMember key)
     {
         return _roots!.ContainsKey(key);
     }
 
     /// <inheritdoc/>
-    public bool TryGetValue(TValue key, [NotNullWhen(true)] out GraphEntity<TKey, TValue>? value)
+    public bool TryGetValue(TSceneMember key, [NotNullWhen(true)] out GraphEntity<TSceneMember>? value)
     {
         return _roots!.TryGetValue(key, out value);
     }
@@ -323,7 +314,7 @@ public sealed class Graph<TKey, TValue> :
     /// Thrown if a converter cannot be found for a model, if a model's parent cannot be resolved, or if a required
     /// scene member cannot be found.
     /// </exception>
-    public HashSet<TValue> ConstructHierarchy(GraphEntity<TKey, TValue> root, ReadOnlySpan<GraphComponent<TKey, TValue>.Model> children)
+    public HashSet<TSceneMember> ConstructHierarchy(GraphEntity<TSceneMember> root, ReadOnlySpan<GraphComponent<TSceneMember>.Model> children)
     {
 #if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(root);
@@ -335,9 +326,9 @@ public sealed class Graph<TKey, TValue> :
 #endif
 
         IGraphConverterProvider converters = Converters;
-        ISceneMemberInfoProvider<TKey, TValue> sceneMemberInfoProvider = SceneMemberInfoProvider;
+        ISceneMemberInfoProvider<TSceneMember> sceneMemberInfoProvider = _sceneMemberInfoProvider;
 
-        HashSet<TValue> createdSceneMembers = [];
+        HashSet<TSceneMember> createdSceneMembers = [];
         Dictionary<Guid, IGraphNode> nodes = new(8)
         {
             { root.ID, root }
@@ -345,7 +336,7 @@ public sealed class Graph<TKey, TValue> :
 
         for (int i = 0; i < children.Length; i++)
         {
-            GraphComponent<TKey, TValue>.Model model = children[i];
+            GraphComponent<TSceneMember>.Model model = children[i];
 
             if (!converters.TryFind(model, out IGraphConverter? converter))
             {
@@ -358,26 +349,19 @@ public sealed class Graph<TKey, TValue> :
             }
 
             IGraphNode? node;
-            if (model is not GraphEntity<TKey, TValue>.Model entityModel || !entityModel.TryGetSceneMemberIdentity(out TKey sceneMemberID))
+            if (model is GraphEntity<TSceneMember>.Model entityModel && entityModel.TryGetSceneMember(out TSceneMember? sceneMember))
             {
-                node = converter.ToGraph(model, this, parent);
+                createdSceneMembers.Add(sceneMember);
+                node = converter.ToGraph(sceneMember, entityModel, parent);
             }
             else
             {
-                if (sceneMemberInfoProvider.TryFind(sceneMemberID, out TValue? sceneMember))
-                {
-                    createdSceneMembers.Add(sceneMember);
-                    node = converter.ToGraph(sceneMember, this, entityModel, parent);
-                }
-                else
-                {
-                    throw new InvalidOperationException($"Unable to find scene member for {entityModel}.");
-                }
+                node = converter.ToGraph(model, this, parent);
             }
 
             parent.Descendants.Add(node);
 
-            if (node is GraphEntity<TKey, TValue> entity)
+            if (node is GraphEntity<TSceneMember> entity)
             {
                 nodes.Add(entity.ID, entity);
             }
@@ -402,12 +386,12 @@ public sealed class Graph<TKey, TValue> :
     /// A collection used to track scene members that have already been created, preventing duplicates during hierarchy
     /// construction. Must not be <see langword="null"/>.
     /// .</param>
-    public void ConstructHierarchy<TEntity>(TEntity root, HashSet<TValue> createdSceneMembers) where TEntity : IGraphNode, IProxyGraphNode<TValue>
+    public void ConstructHierarchy<TEntity>(TEntity root, HashSet<TSceneMember> createdSceneMembers) where TEntity : IGraphNode, IProxyGraphNode<TSceneMember>
     {
-        ISceneMemberInfoProvider<TKey, TValue> sceneMemberInfoProvider = SceneMemberInfoProvider;
+        ISceneMemberInfoProvider<TSceneMember> sceneMemberInfoProvider = _sceneMemberInfoProvider;
         IGraphConverterProvider converterProvider = Converters;
-        Stack<KeyValuePair<IGraphNode, TValue>> stack = [];
-        KeyValuePair<IGraphNode, TValue> current = new(root, root.SceneMember);
+        Stack<KeyValuePair<IGraphNode, TSceneMember>> stack = [];
+        KeyValuePair<IGraphNode, TSceneMember> current = new(root, root.SceneMember);
         do
         {
             if (createdSceneMembers.Add(current.Value))
@@ -421,18 +405,18 @@ public sealed class Graph<TKey, TValue> :
                 current.Key.Descendants.Add(graphNode);
             }
 
-            IReadOnlyCollection<TValue> collection = sceneMemberInfoProvider.GetChildren(current.Value);
+            IReadOnlyCollection<TSceneMember> collection = sceneMemberInfoProvider.GetChildren(current.Value);
             switch (collection)
             {
-                case TValue[] array: PushChildren(current.Key, stack, array); break;
-                case List<TValue> list: PushChildren(current.Key, stack, list); break;
+                case TSceneMember[] array: PushChildren(current.Key, stack, array); break;
+                case List<TSceneMember> list: PushChildren(current.Key, stack, list); break;
                 default: PushChildren(current.Key, stack, collection); break;
             }
         }
         while (stack.TryPop(out current));
     }
 
-    private static void PushChildren(IGraphNode node, Stack<KeyValuePair<IGraphNode, TValue>> stack, TValue[] array)
+    private static void PushChildren(IGraphNode node, Stack<KeyValuePair<IGraphNode, TSceneMember>> stack, TSceneMember[] array)
     {
         int length = array.Length;
         if (length == 0)
@@ -444,12 +428,12 @@ public sealed class Graph<TKey, TValue> :
 #endif
         for (int i = 0; i < length; i++)
         {
-            KeyValuePair<IGraphNode, TValue> item = new(node, array[i]);
+            KeyValuePair<IGraphNode, TSceneMember> item = new(node, array[i]);
             stack.Push(item);
         }
     }
 
-    private static void PushChildren(IGraphNode node, Stack<KeyValuePair<IGraphNode, TValue>> stack, List<TValue> list)
+    private static void PushChildren(IGraphNode node, Stack<KeyValuePair<IGraphNode, TSceneMember>> stack, List<TSceneMember> list)
     {
         int count = list.Count;
         if (count == 0)
@@ -459,15 +443,15 @@ public sealed class Graph<TKey, TValue> :
 #if NET6_0_OR_GREATER
         stack.EnsureCapacity(stack.Count + count);
 #endif
-        using List<TValue>.Enumerator enumerator = list.GetEnumerator();
+        using List<TSceneMember>.Enumerator enumerator = list.GetEnumerator();
         while (enumerator.MoveNext())
         {
-            KeyValuePair<IGraphNode, TValue> item = new(node, enumerator.Current);
+            KeyValuePair<IGraphNode, TSceneMember> item = new(node, enumerator.Current);
             stack.Push(item);
         }
     }
 
-    private static void PushChildren(IGraphNode node, Stack<KeyValuePair<IGraphNode, TValue>> stack, IReadOnlyCollection<TValue> collection)
+    private static void PushChildren(IGraphNode node, Stack<KeyValuePair<IGraphNode, TSceneMember>> stack, IReadOnlyCollection<TSceneMember> collection)
     {
         int count = collection.Count;
         if (count == 0)
@@ -477,9 +461,9 @@ public sealed class Graph<TKey, TValue> :
 #if NET6_0_OR_GREATER
         stack.EnsureCapacity(stack.Count + count);
 #endif
-        foreach (TValue item in collection)
+        foreach (TSceneMember item in collection)
         {
-            KeyValuePair<IGraphNode, TValue> pair = new(node, item);
+            KeyValuePair<IGraphNode, TSceneMember> pair = new(node, item);
             stack.Push(pair);
         }
     }
@@ -489,7 +473,7 @@ public sealed class Graph<TKey, TValue> :
     /// </summary>
     /// <param name="entity">The graph entity to collapse. This parameter cannot be null.</param>
     /// <returns>A list of objects representing the collapsed models derived from the hierarchy of the specified graph entity.</returns>
-    public List<object> CollapseHierarchy(GraphEntity<TKey, TValue> entity)
+    public List<object> CollapseHierarchy(GraphEntity<TSceneMember> entity)
     {
 #if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(entity);
@@ -502,12 +486,12 @@ public sealed class Graph<TKey, TValue> :
 
         List<object> models = [];
 
-        using DepthFirstGraphTraverser<TKey, TValue> traverser = new(entity);
+        using DepthFirstGraphTraverser<TSceneMember> traverser = new(entity);
         while (traverser.MoveNext())
         {
-            GraphEntity<TKey, TValue> current = traverser.Current;
+            GraphEntity<TSceneMember> current = traverser.Current;
 
-            if (current is GenerativeGraphEntity<TKey, TValue> generativeGraphEntity)
+            if (current is GenerativeGraphEntity<TSceneMember> generativeGraphEntity)
             {
                 CollapseComponents(generativeGraphEntity, models);
             }
@@ -518,9 +502,9 @@ public sealed class Graph<TKey, TValue> :
         return models;
     }
 
-    private void CollapseComponents(GenerativeGraphEntity<TKey, TValue> generativeGraphEntity, List<object> models)
+    private void CollapseComponents(GenerativeGraphEntity<TSceneMember> generativeGraphEntity, List<object> models)
     {
-        ConcurrentList<GraphComponent<TKey, TValue>> components = generativeGraphEntity.Components;
+        ConcurrentList<GraphComponent<TSceneMember>> components = generativeGraphEntity.Components;
         int componentCount = components.Count;
 
         if (componentCount == 0)
@@ -533,16 +517,16 @@ public sealed class Graph<TKey, TValue> :
 #endif
 
         IGraphConverterProvider converters = Converters;
-        using ImmutableList<GraphComponent<TKey, TValue>>.Enumerator enumerator = components.GetEnumerator();
+        using ImmutableList<GraphComponent<TSceneMember>>.Enumerator enumerator = components.GetEnumerator();
         while (enumerator.MoveNext())
         {
             ConvertAndAdd(models, converters, enumerator.Current, this);
         }
     }
 
-    private void CollapseChildren(GraphEntity<TKey, TValue> entity, List<object> models)
+    private void CollapseChildren(GraphEntity<TSceneMember> entity, List<object> models)
     {
-        ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>> children = entity.Children;
+        ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>> children = entity.Children;
         int childCount = children.Count;
 
         if (childCount == 0)
@@ -555,7 +539,7 @@ public sealed class Graph<TKey, TValue> :
 #endif
 
         IGraphConverterProvider converters = Converters;
-        using ConcurrentGroupedCollection<TKey, GraphEntity<TKey, TValue>>.Enumerator enumerator = children.GetEnumerator();
+        using ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>.Enumerator enumerator = children.GetEnumerator();
         while (enumerator.MoveNext())
         {
             ConvertAndAdd(models, converters, enumerator.Current, this);
@@ -563,17 +547,17 @@ public sealed class Graph<TKey, TValue> :
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ConvertAndAdd<T>(List<object> models, IGraphConverterProvider converters, T node, Graph<TKey, TValue> graph) where T : IGraphNode
+    private static void ConvertAndAdd<T>(List<object> models, IGraphConverterProvider converters, T node, Graph<TSceneMember> graph) where T : IGraphNode
     {
         if (converters.TryFind(node, out IGraphConverter? converter))
         {
-            object model = converter.ToModel(node, graph);
+            object model = converter.ToModel(node);
             models.Add(model);
         }
     }
 
     /// <inheritdoc/>
-    public IEnumerator<KeyValuePair<TValue, GraphEntity<TKey, TValue>>> GetEnumerator()
+    public IEnumerator<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>> GetEnumerator()
     {
         return _roots!.GetEnumerator();
     }
@@ -583,7 +567,7 @@ public sealed class Graph<TKey, TValue> :
         return _roots!.GetEnumerator();
     }
 
-    void IDictionary<TValue, GraphEntity<TKey, TValue>>.Add(TValue key, GraphEntity<TKey, TValue> value)
+    void IDictionary<TSceneMember, GraphEntity<TSceneMember>>.Add(TSceneMember key, GraphEntity<TSceneMember> value)
     {
         if (_roots!.TryAdd(key, value))
         {
@@ -591,30 +575,30 @@ public sealed class Graph<TKey, TValue> :
         }
     }
 
-    void ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>.Add(KeyValuePair<TValue, GraphEntity<TKey, TValue>> item)
+    void ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>.Add(KeyValuePair<TSceneMember, GraphEntity<TSceneMember>> item)
     {
-        ((ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>)_roots!).Add(item);
+        ((ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>)_roots!).Add(item);
         item.Value.Start(StoppingToken);
     }
 
-    void ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>.Clear()
+    void ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>.Clear()
     {
         throw new NotSupportedException("Clearing the graph is not supported. Remove individual items instead.");
     }
 
-    bool ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>.Contains(KeyValuePair<TValue, GraphEntity<TKey, TValue>> item)
+    bool ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>.Contains(KeyValuePair<TSceneMember, GraphEntity<TSceneMember>> item)
     {
-        return ((ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>)_roots!).Contains(item);
+        return ((ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>)_roots!).Contains(item);
     }
 
-    void ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>.CopyTo(KeyValuePair<TValue, GraphEntity<TKey, TValue>>[] array, int arrayIndex)
+    void ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>.CopyTo(KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>[] array, int arrayIndex)
     {
-        ((ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>)_roots!).CopyTo(array, arrayIndex);
+        ((ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>)_roots!).CopyTo(array, arrayIndex);
     }
 
-    bool ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>.Remove(KeyValuePair<TValue, GraphEntity<TKey, TValue>> item)
+    bool ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>.Remove(KeyValuePair<TSceneMember, GraphEntity<TSceneMember>> item)
     {
-        if (((ICollection<KeyValuePair<TValue, GraphEntity<TKey, TValue>>>)_roots!).Remove(item))
+        if (((ICollection<KeyValuePair<TSceneMember, GraphEntity<TSceneMember>>>)_roots!).Remove(item))
         {
             StopAndDispose(item.Value);
             return true;

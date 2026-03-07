@@ -9,14 +9,8 @@ namespace ProceduralGraph.Generic;
 /// <summary>
 /// Represents a base class for nodes within a graph structure, providing identity, parent-child relationships, and lifecycle management.
 /// </summary>
-/// <typeparam name="TKey">
-/// The type of the key used to identify scene members. Must be a value type that implements 
-/// <see cref="IEquatable{TKey}"/>.
-/// </typeparam>
-/// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-public abstract class LifecycleGraphNode<TKey, TValue> : IGraphNode, IAsyncLifecycle, IDisposable
-    where TKey : struct, IEquatable<TKey>
-    where TValue : class
+/// <typeparam name="TSceneMember">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
+public abstract class LifecycleGraphNode<TSceneMember> : IGraphNode, IAsyncLifecycle, IDisposable where TSceneMember : class
 {
     IGraphNode? IGraphNode.Parent => null;
 

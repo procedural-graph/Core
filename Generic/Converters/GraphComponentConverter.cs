@@ -7,20 +7,17 @@ namespace ProceduralGraph.Generic.Converters;
 /// Represents a base implementation of an entity converter that provides mechanisms for converting between, 
 /// graph components and model representations within a graph structure.
 /// </summary>
+/// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
 /// <typeparam name="TComponent"></typeparam>
 /// <typeparam name="TModel">The type of the model representation used for serialization and deserialization. Must be a non-nullable reference type.</typeparam>
-/// <typeparam name="TEntity">The type of graph entity this component should attach to. Must derive from <see cref="LifecycleGraphNode{TKey, TValue}"/>.</typeparam>
-/// <typeparam name="TKey">
-/// The type of the key used to identify scene members. Must be a value type that implements 
-/// <see cref="IEquatable{TKey}"/>.
-/// </typeparam>
-/// <typeparam name="TValue">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TValue, TKey> : GraphNodeSerializer<TKey, TValue, TComponent, TModel>, IGraphConverter
-    where TComponent : GraphComponent<TKey, TValue>
+/// <typeparam name="TEntity">The type of graph entity this component should attach to. Must derive from <see cref="LifecycleGraphNode{TSceneMember}"/>.</typeparam>
+/// <typeparam name="TSceneMember"/>
+public abstract class GraphComponentConverter<TComponent, TModel, TEntity, TSceneMember> : 
+    GraphNodeSerializer<TSceneMember, TComponent, TModel>, IGraphConverter
+    where TComponent : GraphComponent<TSceneMember>
     where TModel : class
-    where TEntity : LifecycleGraphNode<TKey, TValue>
-    where TKey : struct, IEquatable<TKey>
-    where TValue : class
+    where TEntity : LifecycleGraphNode<TSceneMember>
+    where TSceneMember : class
 {
     private static readonly ImmutableArray<Type> _supportedTypes = [typeof(TComponent), typeof(TModel)];
     /// <inheritdoc/>

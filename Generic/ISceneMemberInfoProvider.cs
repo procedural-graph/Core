@@ -1,63 +1,30 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Collections.Generic;
 
 namespace ProceduralGraph.Generic;
 
 /// <summary>
 /// Defines methods to provide information and comparison operations for scene member objects identified by a key.
 /// </summary>
-/// <typeparam name="TKey">
-/// The type of the key used to identify scene members. Must be a value type that implements 
-/// <see cref="IEquatable{TKey}"/>.
-/// </typeparam>
-/// <typeparam name="TValue">The type of the scene member objects. Must be a reference type.</typeparam>
-public partial interface ISceneMemberInfoProvider<TKey, TValue> : 
-#if NET9_0_OR_GREATER
-    IAlternateEqualityComparer<TKey, TValue>,
-#endif
-    IEqualityComparer<TValue?>
-    where TKey : struct, IEquatable<TKey> where TValue : class
+/// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
+public interface ISceneMemberInfoProvider<TSceneMember> : IEqualityComparer<TSceneMember?> where TSceneMember : class
 {
-    /// <summary>
-    /// Attempts to retrieve the value associated with the specified key.
-    /// </summary>
-    /// <param name="key">The <paramref name="key"/> whose associated value is to be retrieved.</param>
-    /// <param name="value">
-    /// When this method returns, contains the <paramref name="value"/> associated with the specified 
-    /// <paramref name="key"/>, if the key is found; otherwise, the default value for the type of the value parameter. 
-    /// This parameter is passed uninitialized.
-    /// </param>
-    /// <returns><see langword="true"/> if the key was found and value was set; otherwise, <see langword="false"/>.</returns>
-    bool TryFind(TKey key, [NotNullWhen(true)] out TValue? value);
-
-    /// <summary>
-    /// Retrieves the <typeparamref name="TKey"/> associated with the specified <typeparamref name="TValue"/>.
-    /// </summary>
-    /// <param name="value">
-    /// The <typeparamref name="TValue"/> for which to retrieve the 
-    /// corresponding <typeparamref name="TKey"/>.
-    /// </param>
-    /// <returns>The <typeparamref name="TKey"/> associated with the specified <typeparamref name="TValue"/>.</returns>
-    TKey GetKey(TValue value);
-
     /// <summary>
     /// Gets the parent of the specified value in the hierarchy, if one exists.
     /// </summary>
     /// <param name="value">The value for which to retrieve the parent.</param>
     /// <returns>The parent of the specified value, or <see langword="null"/> if the value has no parent or is not found in the hierarchy.</returns>
-    TValue? GetParent(TValue value);
+    TSceneMember? GetParent(TSceneMember value);
 
     /// <summary>
-    /// Retrieves the root element of the scene graph that contains the specified <typeparamref name="TValue"/>.
+    /// Retrieves the root element of the scene graph that contains the specified <typeparamref name="TSceneMember"/>.
     /// </summary>
-    /// <remarks>If the provided <typeparamref name="TValue"/> is already the root, it is returned as-is.</remarks>
+    /// <remarks>If the provided <typeparamref name="TSceneMember"/> is already the root, it is returned as-is.</remarks>
     /// <param name="value">
-    /// The <typeparamref name="TValue"/> for which to locate the root element. 
+    /// The <typeparamref name="TSceneMember"/> for which to locate the root element. 
     /// Cannot be <see langword="null"/>.
     /// </param>
-    /// <returns>The root element of the scene graph that contains the specified <typeparamref name="TValue"/>.</returns>
-    TValue GetRoot(TValue value);
+    /// <returns>The root element of the scene graph that contains the specified <typeparamref name="TSceneMember"/>.</returns>
+    TSceneMember GetRoot(TSceneMember value);
 
     /// <summary>
     /// Retrieves the immediate child elements of the specified value.
@@ -67,35 +34,5 @@ public partial interface ISceneMemberInfoProvider<TKey, TValue> :
     /// A read-only collection containing the immediate children of the specified value. Returns an empty collection
     /// if the value has no children.
     /// </returns>
-    IReadOnlyCollection<TValue> GetChildren(TValue value);
-
-#if NET9_0_OR_GREATER
-    TValue IAlternateEqualityComparer<TKey, TValue>.Create(TKey alternate)
-    {
-        if (TryFind(alternate, out var value))
-        {
-            return value;
-        }
-
-        throw new KeyNotFoundException($"The alternate key {alternate} was not found.");
-    }
-#else
-    /// <summary>
-    /// Determines whether the specified <typeparamref name="TKey"/> equals the specified <paramref name="value"/>.
-    /// </summary>
-    /// <param name="key">The <typeparamref name="TKey"/> instance to compare.</param>
-    /// <param name="value">The <typeparamref name="TValue"/> instance to compare.</param>
-    /// <returns>
-    /// <see langword="true"/> if the specified <typeparamref name="TKey"/> equals the specified <paramref name="value"/>; 
-    /// otherwise, <see langword="false"/>.
-    /// </returns>
-    bool Equals(TKey key, TValue value);
-
-    /// <summary>
-    /// Returns a hash code for the specified <typeparamref name="TKey"/> instance.
-    /// </summary>
-    /// <param name="key">The <typeparamref name="TKey"/> instance for which a hash code is to be returned.</param>
-    /// <returns>A hash code for the specified <typeparamref name="TKey"/> instance.</returns>
-    int GetHashCode(TKey key);
-#endif
+    IReadOnlyCollection<TSceneMember> GetChildren(TSceneMember value);
 }
