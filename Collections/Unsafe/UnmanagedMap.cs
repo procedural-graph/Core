@@ -24,19 +24,6 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
     /// <summary>
     /// Gets or sets the element at the specified two-dimensional coordinates within the buffer.
     /// </summary>
-    /// <param name="x">
-    /// The zero-based horizontal index of the element to access. Must be greater than or equal to 0 
-    /// and less than <see cref="Width"/>.
-    /// </param>
-    /// <param name="y">
-    /// The zero-based vertical index of the element to access. Must be greater than or equal to 0
-    /// and less than <see cref="Height"/>.
-    /// </param>
-    /// <returns>The <typeparamref name="T"/> at the specified coordinates.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">
-    /// Thrown when <paramref name="x"/> is less than 0 or greater than or equal to <see cref="Width"/>, 
-    /// or when <paramref name="y"/> is less than 0 or greater than or equal to <see cref="Height"/>.
-    /// </exception>
     public unsafe TValue this[long x, long y]
     {
         get
@@ -67,12 +54,9 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
     }
 
     /// <summary>
-    /// Executes a specified operation on each element of the map in parallel. 
+    /// Executes a specified operation on each row of the map in parallel. 
     /// </summary>
-    /// <typeparam name="TOperation">The type of the operation to apply, which must implement <see cref="IMapOperation{TSource, TSource}"/>.</typeparam>
-    /// <param name="operation">The operation to apply to each element.</param>
-    /// <exception cref="ObjectDisposedException">Thrown when the map has been disposed.</exception>
-    public unsafe void ForEach<TOperation>(TOperation operation) where TOperation : struct, IMapOperation<TValue, TValue>
+    public unsafe void ForEachRow<TOperation>(TOperation operation) where TOperation : struct, IMapOperation<TValue>
     {
         ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
 
@@ -83,25 +67,14 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         Parallel.For(0L, height, y =>
         {
             TValue* rowOffset = (TValue*)rawSourcePtr + (y * width);
-            for (long x = 0; x < width; x++)
-            {
-                ref TValue valueRef = ref *(rowOffset + x);
-                valueRef = operation.Apply(x, y, valueRef);
-            }
+            operation.Apply(rowOffset, y, width);
         });
     }
 
     /// <summary>
-    /// Executes an operation that maps elements from a source map to a destination map in parallel. 
+    /// Executes an operation that maps elements row-by-row from a source map to a destination map in parallel. 
     /// </summary>
-    /// <typeparam name="TResult">The type of elements in the destination map.</typeparam>
-    /// <typeparam name="TOperation">The type of the mapping operation. </typeparam>
-    /// <param name="destination">The destination <see cref="UnmanagedMap{TResult}"/>.</param>
-    /// <param name="operation">The operation to apply to each source element to produce a destination element.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="destination"/> is <see langword="null"/>.</exception>
-    /// <exception cref="ObjectDisposedException">Thrown when either map has been disposed.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when the dimensions of the source and destination maps do not match.</exception>
-    public unsafe void ForEach<TResult, TOperation>(UnmanagedMap<TResult> destination, TOperation operation)
+    public unsafe void ForEachRow<TResult, TOperation>(UnmanagedMap<TResult> destination, TOperation operation)
         where TResult : unmanaged
         where TOperation : struct, IMapOperation<TValue, TResult>
     {
@@ -117,29 +90,18 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         using SafeHandle.Scope destinationScope = destination.Handle.GetScoped();
         IntPtr rawDestinationPtr = destinationScope;
 
-        Parallel.For(0, height, y =>
+        Parallel.For(0L, height, y =>
         {
             TValue* sourceRowOffset = (TValue*)rawSourcePtr + (y * width);
             TResult* destinationRowOffset = (TResult*)rawDestinationPtr + (y * width);
-            for (long x = 0; x < width; x++)
-            {
-                *(destinationRowOffset + x) = operation.Apply(x, y, in *(sourceRowOffset + x));
-            }
+            operation.Apply(sourceRowOffset, destinationRowOffset, y, width);
         });
     }
 
     /// <summary>
-    /// Executes an operation that combines elements from two source maps into a destination map in parallel. 
+    /// Executes an operation that combines elements row-by-row from two source maps into a destination map in parallel. 
     /// </summary>
-    /// <typeparam name="TSource">The type of elements in the second source map.</typeparam>
-    /// <typeparam name="TResult">The type of elements in the destination map.</typeparam>
-    /// <typeparam name="TOperation">The type of the dual-source mapping operation. </typeparam>
-    /// <param name="source">The second source <see cref="UnmanagedMap{TSource2}"/>.</param>
-    /// <param name="destination">The destination <see cref="UnmanagedMap{TResult}"/>.</param>
-    /// <param name="operation">The operation to apply to elements from both sources.</param>
-    /// <exception cref="ArgumentNullException">Thrown when any input map is <see langword="null"/>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when map dimensions are mismatched.</exception>
-    public unsafe void ForEach<TSource, TResult, TOperation>(UnmanagedMap<TSource> source, UnmanagedMap<TResult> destination, TOperation operation)
+    public unsafe void ForEachRow<TSource, TResult, TOperation>(UnmanagedMap<TSource> source, UnmanagedMap<TResult> destination, TOperation operation)
         where TSource : unmanaged
         where TResult : unmanaged
         where TOperation : struct, IMapOperation<TValue, TSource, TResult>
@@ -168,10 +130,88 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
             TValue* source1RowOffset = (TValue*)rawSource1Ptr + (y * width);
             TSource* source2RowOffset = (TSource*)rawSource2Ptr + (y * width);
             TResult* destinationRowOffset = (TResult*)rawDestinationPtr + (y * width);
-            for (long x = 0; x < width; x++)
-            {
-                *(destinationRowOffset + x) = operation.Apply(x, y, in *(source1RowOffset + x), in *(source2RowOffset + x));
-            }
+            operation.Apply(source1RowOffset, source2RowOffset, destinationRowOffset, y, width);
+        });
+    }
+
+    /// <summary>
+    /// Executes a specified operation on each column of the map in parallel. 
+    /// </summary>
+    public unsafe void ForEachColumn<TOperation>(TOperation operation) where TOperation : struct, IMapOperation<TValue>
+    {
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+
+        long height = Height, width = Width;
+        using SafeHandle.Scope scope = Handle.GetScoped();
+        IntPtr rawSourcePtr = scope;
+
+        Parallel.For(0L, width, x =>
+        {
+            TValue* columnOffset = (TValue*)rawSourcePtr + x;
+            operation.Apply(columnOffset, x, height);
+        });
+    }
+
+    /// <summary>
+    /// Executes an operation that maps elements column-by-column from a source map to a destination map in parallel. 
+    /// </summary>
+    public unsafe void ForEachColumn<TResult, TOperation>(UnmanagedMap<TResult> destination, TOperation operation)
+        where TResult : unmanaged
+        where TOperation : struct, IMapOperation<TValue, TResult>
+    {
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(destination is null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(Width != destination.Width, nameof(destination.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIf(Height != destination.Height, nameof(destination.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+
+        long height = Height, width = Width;
+        using SafeHandle.Scope sourceScope = Handle.GetScoped();
+        IntPtr rawSourcePtr = sourceScope;
+
+        using SafeHandle.Scope destinationScope = destination.Handle.GetScoped();
+        IntPtr rawDestinationPtr = destinationScope;
+
+        Parallel.For(0L, width, x =>
+        {
+            TValue* sourceColumnOffset = (TValue*)rawSourcePtr + x;
+            TResult* destinationColumnOffset = (TResult*)rawDestinationPtr + x;
+            operation.Apply(sourceColumnOffset, destinationColumnOffset, x, height);
+        });
+    }
+
+    /// <summary>
+    /// Executes an operation that combines elements column-by-column from two source maps into a destination map in parallel. 
+    /// </summary>
+    public unsafe void ForEachColumn<TSource, TResult, TOperation>(UnmanagedMap<TSource> source, UnmanagedMap<TResult> destination, TOperation operation)
+        where TSource : unmanaged
+        where TResult : unmanaged
+        where TOperation : struct, IMapOperation<TValue, TSource, TResult>
+    {
+        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIf(source is null, nameof(source), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(destination is null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
+
+        long height = Height, width = Width;
+        ThrowHelpers.ThrowIf(width != source.Width, nameof(source.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIf(height != source.Height, nameof(source.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIf(width != destination.Width, nameof(destination.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIf(height != destination.Height, nameof(destination.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+
+        using SafeHandle.Scope source1Handle = Handle.GetScoped();
+        IntPtr rawSource1Ptr = source1Handle;
+
+        using SafeHandle.Scope source2Handle = source.Handle.GetScoped();
+        IntPtr rawSource2Ptr = source2Handle;
+
+        using SafeHandle.Scope destinationHandle = destination.Handle.GetScoped();
+        IntPtr rawDestinationPtr = destinationHandle;
+
+        Parallel.For(0L, width, x =>
+        {
+            TValue* source1ColumnOffset = (TValue*)rawSource1Ptr + x;
+            TSource* source2ColumnOffset = (TSource*)rawSource2Ptr + x;
+            TResult* destinationColumnOffset = (TResult*)rawDestinationPtr + x;
+            operation.Apply(source1ColumnOffset, source2ColumnOffset, destinationColumnOffset, x, height);
         });
     }
 }
