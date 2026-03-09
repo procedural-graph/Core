@@ -502,6 +502,17 @@ public sealed class Graph<TSceneMember> :
         return models;
     }
 
+    /// <inheritdoc/>
+    protected override void OnDisposing()
+    {
+        base.OnDisposing();
+
+        if (_serviceProvider is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+    }
+
     private void CollapseComponents(GenerativeGraphEntity<TSceneMember> generativeGraphEntity, List<object> models)
     {
         ConcurrentList<GraphComponent<TSceneMember>> components = generativeGraphEntity.Components;
