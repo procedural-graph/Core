@@ -36,7 +36,7 @@ public sealed class Graph<TSceneMember> :
     /// </summary>
     public ILogger Logger { get; }
 
-    private readonly ISceneMemberInfoProvider<TSceneMember> _sceneMemberInfoProvider;
+    private readonly ISceneMemberManager<TSceneMember> _sceneMemberInfoProvider;
 
     private ConcurrentDictionary<TSceneMember, GraphEntity<TSceneMember>>? _roots;
     ICollection<IGraphNode> IGraphNode.Descendants => (ICollection<IGraphNode>)_roots!.Values;
@@ -84,7 +84,7 @@ public sealed class Graph<TSceneMember> :
     {
         _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
         Converters = converters ?? throw new ArgumentNullException(nameof(converters));
-        _sceneMemberInfoProvider = serviceProvider.GetRequiredService<ISceneMemberInfoProvider<TSceneMember>>();
+        _sceneMemberInfoProvider = serviceProvider.GetRequiredService<ISceneMemberManager<TSceneMember>>();
         Logger = serviceProvider.GetRequiredService<ILogger>();
     }
 
@@ -319,7 +319,7 @@ public sealed class Graph<TSceneMember> :
         ThrowHelpers.ThrowIfNull(root);
 
         IGraphConverterProvider converters = Converters;
-        ISceneMemberInfoProvider<TSceneMember> sceneMemberInfoProvider = _sceneMemberInfoProvider;
+        ISceneMemberManager<TSceneMember> sceneMemberInfoProvider = _sceneMemberInfoProvider;
 
         HashSet<TSceneMember> createdSceneMembers = [];
         Dictionary<Guid, IGraphNode> nodes = new(8)
@@ -381,7 +381,7 @@ public sealed class Graph<TSceneMember> :
     /// .</param>
     public void ConstructHierarchy<TEntity>(TEntity root, HashSet<TSceneMember> createdSceneMembers) where TEntity : IGraphNode, IProxyGraphNode<TSceneMember>
     {
-        ISceneMemberInfoProvider<TSceneMember> sceneMemberInfoProvider = _sceneMemberInfoProvider;
+        ISceneMemberManager<TSceneMember> sceneMemberInfoProvider = _sceneMemberInfoProvider;
         IGraphConverterProvider converterProvider = Converters;
         Stack<KeyValuePair<IGraphNode, TSceneMember>> stack = [];
         KeyValuePair<IGraphNode, TSceneMember> current = new(root, root.SceneMember);
