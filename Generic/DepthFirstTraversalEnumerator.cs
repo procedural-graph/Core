@@ -12,7 +12,7 @@ namespace ProceduralGraph.Generic;
 /// Provides a depth-first traversal of a graph starting from a specified root graph entity.
 /// </summary>
 /// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
-public ref struct DepthFirstGraphTraverser<TSceneMember> : IEnumerator<GraphEntity<TSceneMember>> where TSceneMember : class
+public struct DepthFirstGraphTraverser<TSceneMember> : IEnumerator<GraphEntity<TSceneMember>> where TSceneMember : class
 {
     private readonly GraphEntity<TSceneMember> _root;
     private GraphEntity<TSceneMember>[]? _rentedArray;
@@ -36,14 +36,7 @@ public ref struct DepthFirstGraphTraverser<TSceneMember> : IEnumerator<GraphEnti
     /// </param>
     public DepthFirstGraphTraverser(GraphEntity<TSceneMember> root, bool preordered = true)
     {
-#if NET7_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(root);
-#else
-        if (root is null)
-        {
-            throw new ArgumentNullException(nameof(root));
-        }
-#endif
+        ThrowHelpers.ThrowIfNull(root);
         _rentedArray = RentDefaultAllocationSize<GraphEntity<TSceneMember>>();
         _root = root;
         _add = preordered ? AddSortedChildren : AddChildren;
@@ -52,7 +45,7 @@ public ref struct DepthFirstGraphTraverser<TSceneMember> : IEnumerator<GraphEnti
     /// <inheritdoc/>
     public bool MoveNext()
     {
-        ThrowObjectDisposedExceptionIf(_rentedArray is null);
+        ThrowHelpers.ThrowIfDisposed(_rentedArray is null, this);
 
         if (_completed)
         {
@@ -89,7 +82,7 @@ public ref struct DepthFirstGraphTraverser<TSceneMember> : IEnumerator<GraphEnti
     /// <inheritdoc/>
     public void Reset()
     {
-        ThrowObjectDisposedExceptionIf(_rentedArray is null);
+        ThrowHelpers.ThrowIfDisposed(_rentedArray is null, this);
         Array.Clear(_rentedArray, 0, _count);
         _completed = false;
         _count = 0;
@@ -102,15 +95,6 @@ public ref struct DepthFirstGraphTraverser<TSceneMember> : IEnumerator<GraphEnti
         if (Return(_rentedArray))
         {
             _rentedArray = null;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ThrowObjectDisposedExceptionIf([DoesNotReturnIf(true)] bool condition)
-    {
-        if (condition)
-        {
-            throw new ObjectDisposedException(nameof(DepthFirstGraphTraverser<>));
         }
     }
 }

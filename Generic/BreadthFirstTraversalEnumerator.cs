@@ -12,7 +12,7 @@ namespace ProceduralGraph.Generic;
 /// Provides a breadth-first traversal of a graph starting from a specified root graph entity.
 /// </summary>
 /// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
-public ref struct BreadthFirstTraversalEnumerator<TSceneMember> : IEnumerator<GraphEntity<TSceneMember>> where TSceneMember : class
+public struct BreadthFirstTraversalEnumerator<TSceneMember> : IEnumerator<GraphEntity<TSceneMember>> where TSceneMember : class
 {
     private readonly GraphEntity<TSceneMember> _root;
     private GraphEntity<TSceneMember>[]? _rentedArray;
@@ -37,14 +37,7 @@ public ref struct BreadthFirstTraversalEnumerator<TSceneMember> : IEnumerator<Gr
     /// </param>
     public BreadthFirstTraversalEnumerator(GraphEntity<TSceneMember> root, bool preordered = true)
     {
-#if NET7_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(root);
-#else
-        if (root is null)
-        {
-            throw new ArgumentNullException(nameof(root));
-        }
-#endif
+        ThrowHelpers.ThrowIfNull(root);
         _rentedArray = RentDefaultAllocationSize<GraphEntity<TSceneMember>>();
         _root = root;
         _add = preordered ? AddSortedChildren : AddChildren;
@@ -53,8 +46,7 @@ public ref struct BreadthFirstTraversalEnumerator<TSceneMember> : IEnumerator<Gr
     /// <inheritdoc/>
     public bool MoveNext()
     {
-        ThrowObjectDisposedExceptionIf(_rentedArray is null);
-
+        ThrowHelpers.ThrowIfDisposed(_rentedArray is null, this);
         if (_completed) return false;
 
         if (_current is null)
@@ -104,7 +96,7 @@ public ref struct BreadthFirstTraversalEnumerator<TSceneMember> : IEnumerator<Gr
     /// <inheritdoc/>
     public void Reset()
     {
-        ThrowObjectDisposedExceptionIf(_rentedArray is null);
+        ThrowHelpers.ThrowIfDisposed(_rentedArray is null, this);
         Array.Clear(_rentedArray, 0, _tail);
         _completed = false;
         _tail = 0;
@@ -117,15 +109,6 @@ public ref struct BreadthFirstTraversalEnumerator<TSceneMember> : IEnumerator<Gr
         if (Return(_rentedArray))
         {
             _rentedArray = null;
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void ThrowObjectDisposedExceptionIf([DoesNotReturnIf(true)] bool condition)
-    {
-        if (condition)
-        {
-            throw new ObjectDisposedException(nameof(BreadthFirstTraversalEnumerator<>));
         }
     }
 }

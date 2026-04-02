@@ -316,14 +316,7 @@ public sealed class Graph<TSceneMember> :
     /// </exception>
     public HashSet<TSceneMember> ConstructHierarchy(GraphEntity<TSceneMember> root, ReadOnlySpan<GraphComponent<TSceneMember>.Model> children)
     {
-#if NET7_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(root);
-#else
-        if (root is null)
-        {
-            throw new ArgumentNullException(nameof(root));
-        }
-#endif
+        ThrowHelpers.ThrowIfNull(root);
 
         IGraphConverterProvider converters = Converters;
         ISceneMemberInfoProvider<TSceneMember> sceneMemberInfoProvider = _sceneMemberInfoProvider;
@@ -475,14 +468,7 @@ public sealed class Graph<TSceneMember> :
     /// <returns>A list of objects representing the collapsed models derived from the hierarchy of the specified graph entity.</returns>
     public List<object> CollapseHierarchy(GraphEntity<TSceneMember> entity)
     {
-#if NET7_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(entity);
-#else
-        if (entity is null)
-        {
-            throw new ArgumentNullException(nameof(entity));
-        }
-#endif
+        ThrowHelpers.ThrowIfNull(entity);
 
         List<object> models = [];
 

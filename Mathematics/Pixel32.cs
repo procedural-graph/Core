@@ -99,14 +99,14 @@ public struct Pixel32 : IVector4<Pixel32, byte>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         readonly get
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.GetComponent(in this, index, out byte value);
             return value;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.SetComponent(ref this, index, value);
         }
     }

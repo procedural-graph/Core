@@ -19,15 +19,15 @@ public abstract class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, IStructu
     {
         get
         {
-            ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-            ThrowHelpers.ThrowIf((ulong)index < (ulong)Length, index, ThrowHelpers.CreateArgumentOutOfRangeException);
+            ThrowHelpers.ThrowIfDisposed(Disposed, this);
+            ThrowHelpers.ThrowIfOutOfRange(index, Length, nameof(index));
             using SafeHandle.Scope scope = Handle.GetScoped();
             return *((T*)scope + index);
         }
         set
         {
-            ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-            ThrowHelpers.ThrowIf((ulong)index < (ulong)Length, index, ThrowHelpers.CreateArgumentOutOfRangeException);
+            ThrowHelpers.ThrowIfDisposed(Disposed, this);
+            ThrowHelpers.ThrowIfOutOfRange(index, Length, nameof(index));
             using SafeHandle.Scope scope = Handle.GetScoped();
             *((T*)scope + index) = value;
         }
@@ -42,7 +42,7 @@ public abstract class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, IStructu
     /// <inheritdoc cref="IList{T}.IndexOf"/>
     public unsafe long IndexOf(T item)
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         EqualityComparer<T> equalityComparer = EqualityComparer<T>.Default;
 
@@ -69,8 +69,8 @@ public abstract class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, IStructu
     /// <inheritdoc cref="IStructuralEquatable.Equals(object?, IEqualityComparer)"/>
     public bool Equals(IEnumerable<T> other, IEqualityComparer<T> comparer)
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
+        ThrowHelpers.ThrowIfNull(comparer);
 
         if (other is null || (TryGetNonEnumeratedCount(other, out long otherCount) && otherCount != Length))
         {
@@ -93,8 +93,8 @@ public abstract class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, IStructu
     /// <inheritdoc cref="IStructuralEquatable.GetHashCode(IEqualityComparer)"/>
     public int GetHashCode(IEqualityComparer<T> comparer)
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
+        ThrowHelpers.ThrowIfNull(comparer);
 
         var hash = new HashCode();
         using Enumerator enumerator = GetEnumerator();
@@ -108,8 +108,8 @@ public abstract class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, IStructu
     /// <inheritdoc cref="IStructuralComparable.CompareTo(object?, IComparer)"/>
     public int CompareTo(IEnumerable<T>? other, IComparer<T> comparer)
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
+        ThrowHelpers.ThrowIfNull(comparer);
 
         if (other is null)
         {

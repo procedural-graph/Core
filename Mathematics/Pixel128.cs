@@ -120,14 +120,14 @@ public struct Pixel128 : IVector4<Pixel128, float>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         readonly get
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.GetComponent(in this, index, out float result);
             return result;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.SetComponent(ref this, index, value);
         }
     }

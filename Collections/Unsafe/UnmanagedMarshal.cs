@@ -66,7 +66,7 @@ public static partial class UnmanagedMarshal
     /// <returns>A <see cref="SafeHandle"/> that represents the handle to the unmanaged memory.</returns>
     public static SafeHandle GetHandle<T>(UnmanagedMemory<T> memory) where T : unmanaged
     {
-        ThrowHelpers.ThrowIf(memory is null, nameof(memory), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(memory);
         return memory.GetHandle();
     }
 
@@ -127,7 +127,7 @@ public static partial class UnmanagedMarshal
 #else
     private static unsafe void* Alloc(long elementCount, int sizeInBytes, out long byteCount)
     {
-        ThrowHelpers.ThrowIf(elementCount < 0, elementCount, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNegative(elementCount);
         byteCount = elementCount * sizeInBytes;
         void* ptr = (void*)Marshal.AllocHGlobal((IntPtr)byteCount);
         GC.AddMemoryPressure(byteCount);
@@ -179,13 +179,13 @@ public static partial class UnmanagedMarshal
 #if NET6_0_OR_GREATER
     public static unsafe void Free(void* buffer)
     {
-        ArgumentNullException.ThrowIfNull(buffer, nameof(buffer));
+        ArgumentNullException.ThrowIfNull(buffer);
         NativeMemory.Free(buffer);
     }
 #else
     public static unsafe void Free(void* buffer)
     {
-        ThrowHelpers.ThrowIf(buffer == null, nameof(buffer), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(buffer);
         Marshal.FreeHGlobal((IntPtr)buffer);
     }
 #endif
@@ -199,13 +199,13 @@ public static partial class UnmanagedMarshal
 #if NET6_0_OR_GREATER
     public static unsafe void Clear<T>(T* buffer, long elementCount) where T : unmanaged
     {
-        ArgumentNullException.ThrowIfNull(buffer, nameof(buffer));
+        ArgumentNullException.ThrowIfNull(buffer);
         NativeMemory.Clear(buffer, (nuint)elementCount * (nuint)sizeof(T));
     }
 #else
     public static unsafe void Clear<T>(T* buffer, long elementCount) where T : unmanaged
     {
-        ThrowHelpers.ThrowIf(buffer == null, nameof(buffer), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(buffer);
         long size = sizeof(T) * elementCount;
         Buffer.MemoryCopy(null, buffer, size, 0);
     }
@@ -221,15 +221,15 @@ public static partial class UnmanagedMarshal
 #if NET6_0_OR_GREATER
     public static unsafe void Copy<T>(T* source, T* destination, long elementCount) where T : unmanaged
     {
-        ArgumentNullException.ThrowIfNull(source, nameof(source));
-        ArgumentNullException.ThrowIfNull(destination, nameof(destination));
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(destination);
         NativeMemory.Copy(source, destination, (nuint)elementCount * (nuint)sizeof(T));
     }
 #else
     public static unsafe void Copy<T>(T* source, T* destination, long elementCount) where T : unmanaged
     {
-        ThrowHelpers.ThrowIf(source == null, nameof(source), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf(destination == null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(source);
+        ThrowHelpers.ThrowIfNull(destination);
         long size = sizeof(T) * elementCount;
         Buffer.MemoryCopy(source, destination, size, size);
     }
@@ -245,8 +245,8 @@ public static partial class UnmanagedMarshal
 #if NET6_0_OR_GREATER
     public static unsafe void Copy(void* source, void* destination, long byteCount)
     {
-        ArgumentNullException.ThrowIfNull(source, nameof(source));
-        ArgumentNullException.ThrowIfNull(destination, nameof(destination));
+        ArgumentNullException.ThrowIfNull(source);
+        ArgumentNullException.ThrowIfNull(destination);
         try
         {
             NativeMemory.Copy(source, destination, nuint.CreateChecked(byteCount));
@@ -259,9 +259,9 @@ public static partial class UnmanagedMarshal
 #else
     public static unsafe void Copy(void* source, void* destination, long byteCount)
     {
-        ThrowHelpers.ThrowIf(source == null, nameof(source), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf(destination == null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf(byteCount < 0, byteCount, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNull(source);
+        ThrowHelpers.ThrowIfNull(destination);
+        ThrowHelpers.ThrowIfNegative(byteCount);
         Buffer.MemoryCopy(source, destination, byteCount, byteCount);
     }
 #endif

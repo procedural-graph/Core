@@ -96,14 +96,14 @@ public struct Double4 : IVector4<Double4, double>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         readonly get
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.GetComponent(in this, index, out double result);
             return result;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.SetComponent(ref this, index, value);
         }
     }

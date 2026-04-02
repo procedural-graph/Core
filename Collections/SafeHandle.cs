@@ -83,7 +83,7 @@ public sealed class SafeHandle : System.Runtime.InteropServices.SafeHandle, IEqu
     {
         bool success = false;
         DangerousAddRef(ref success);
-        ThrowHelpers.ThrowIf(!success, nameof(handle), ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(!success, this);
         return new Scope(this);
     }
 

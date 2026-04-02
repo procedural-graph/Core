@@ -30,7 +30,7 @@ public sealed class UnmanagedArrayReference<TValue> : UnmanagedArray<TValue> whe
         Handle = source.GetHandle();
         bool success = false;
         Handle.DangerousAddRef(ref success);
-        ThrowHelpers.ThrowIf(!success, nameof(source), ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(!success, this);
         Source = source;
     }
 

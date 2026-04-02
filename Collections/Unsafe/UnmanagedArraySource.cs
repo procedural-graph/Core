@@ -22,7 +22,7 @@ public sealed class UnmanagedArraySource<TValue> : UnmanagedArray<TValue>, IClon
     /// <param name="elementCount">The number of elements to allocate in unmanaged array. Must be zero or greater.</param>
     public unsafe UnmanagedArraySource(long elementCount)
     {
-        ThrowHelpers.ThrowIf(elementCount < 0L, elementCount, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNegative(elementCount);
         Length = elementCount;
         TValue* buffer = UnmanagedMarshal.AllocZeroed<TValue>(elementCount, out _);
         Handle = new SafeHandle((IntPtr)buffer);
@@ -31,14 +31,14 @@ public sealed class UnmanagedArraySource<TValue> : UnmanagedArray<TValue>, IClon
     internal UnmanagedArraySource(SafeHandle handle, long elementCount)
     {
         Handle = handle ?? throw new ArgumentNullException(nameof(handle));
-        ThrowHelpers.ThrowIf(elementCount < 0L, elementCount, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNegative(elementCount);
         Length = elementCount;
     }
 
     /// <inheritdoc/>
     public UnmanagedArray<TValue> DeepCopy()
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         SafeHandle clone = Clone(Handle, Length);
         try
         {
@@ -54,7 +54,7 @@ public sealed class UnmanagedArraySource<TValue> : UnmanagedArray<TValue>, IClon
     /// <inheritdoc/>
     public UnmanagedArray<TValue> ShallowCopy()
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         return new UnmanagedArrayReference<TValue>(this);
     }
 

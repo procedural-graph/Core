@@ -25,10 +25,10 @@ public sealed class UnmanagedMapSource<TValue> : UnmanagedMap<TValue>, ICloneabl
     {
         Handle = handle ?? throw new ArgumentNullException(nameof(handle));
 
-        ThrowHelpers.ThrowIf(width < 0L, width, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNegative(width);
         Width = width;
 
-        ThrowHelpers.ThrowIf(height < 0L, height, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNegative(height);
         Height = height;
 
         Length = checked(width * height);
@@ -41,10 +41,10 @@ public sealed class UnmanagedMapSource<TValue> : UnmanagedMap<TValue>, ICloneabl
     /// <param name="height">The height of the unmanaged map source. Must be a non-negative value.</param>
     public unsafe UnmanagedMapSource(long width, long height)
     {
-        ThrowHelpers.ThrowIf(width < 0L, width, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNegative(width);
         Width = width;
 
-        ThrowHelpers.ThrowIf(height < 0L, height, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNegative(height);
         Height = height;
 
         Length = checked(width * height);
@@ -56,7 +56,7 @@ public sealed class UnmanagedMapSource<TValue> : UnmanagedMap<TValue>, ICloneabl
     /// <inheritdoc/>
     public UnmanagedMap<TValue> DeepCopy()
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         SafeHandle clone = Clone(Handle, Length);
         try
         {
@@ -72,7 +72,7 @@ public sealed class UnmanagedMapSource<TValue> : UnmanagedMap<TValue>, ICloneabl
     /// <inheritdoc/>
     public UnmanagedMap<TValue> ShallowCopy()
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         return new UnmanagedMapReference<TValue>(this);
     }
 

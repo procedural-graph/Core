@@ -28,17 +28,17 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
     {
         get
         {
-            ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-            ThrowHelpers.ThrowIf((ulong)x >= (ulong)Width, y, ThrowHelpers.CreateArgumentOutOfRangeException);
-            ThrowHelpers.ThrowIf((ulong)y >= (ulong)Height, y, ThrowHelpers.CreateArgumentOutOfRangeException);
+            ThrowHelpers.ThrowIfDisposed(Disposed, this);
+            ThrowHelpers.ThrowIfOutOfRange(x, Width);
+            ThrowHelpers.ThrowIfOutOfRange(y, Height);
             using SafeHandle.Scope scope = Handle.GetScoped();
             return *((TValue*)scope + (y * Width + x));
         }
         set
         {
-            ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-            ThrowHelpers.ThrowIf((ulong)x >= (ulong)Width, y, ThrowHelpers.CreateArgumentOutOfRangeException);
-            ThrowHelpers.ThrowIf((ulong)y >= (ulong)Height, y, ThrowHelpers.CreateArgumentOutOfRangeException);
+            ThrowHelpers.ThrowIfDisposed(Disposed, this);
+            ThrowHelpers.ThrowIfOutOfRange(x, Width);
+            ThrowHelpers.ThrowIfOutOfRange(y, Height);
             using SafeHandle.Scope scope = Handle.GetScoped();
             *((TValue*)scope + (y * Width + x)) = value;
         }
@@ -47,7 +47,7 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
     /// <inheritdoc/>
     public unsafe override bool Contains(TValue item)
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         EqualityComparer<TValue> equalityComparer = EqualityComparer<TValue>.Default;
         using SafeHandle.Scope scope = Handle.GetScoped();
         return UnmanagedMarshal.IndexOf((TValue*)scope, Length, item, equalityComparer) != -1L;
@@ -58,7 +58,7 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
     /// </summary>
     public unsafe void ForEachRow<TOperation>(TOperation operation) where TOperation : struct, IMapOperation<TValue>
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         long height = Height, width = Width;
         using SafeHandle.Scope scope = Handle.GetScoped();
@@ -78,10 +78,10 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         where TResult : unmanaged
         where TOperation : struct, IMapOperation<TValue, TResult>
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        ThrowHelpers.ThrowIf(destination is null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf(Width != destination.Width, nameof(destination.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
-        ThrowHelpers.ThrowIf(Height != destination.Height, nameof(destination.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
+        ThrowHelpers.ThrowIfNull(destination);
+        ThrowHelpers.ThrowIfOutOfRange(Width, destination.Width);
+        ThrowHelpers.ThrowIfOutOfRange(Height, destination.Height);
 
         long height = Height, width = Width;
         using SafeHandle.Scope sourceScope = Handle.GetScoped();
@@ -106,15 +106,15 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         where TResult : unmanaged
         where TOperation : struct, IMapOperation<TValue, TSource, TResult>
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        ThrowHelpers.ThrowIf(source is null, nameof(source), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf(destination is null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
+        ThrowHelpers.ThrowIfNull(source);
+        ThrowHelpers.ThrowIfNull(destination);
 
         long height = Height, width = Width;
-        ThrowHelpers.ThrowIf(width != source.Width, nameof(source.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
-        ThrowHelpers.ThrowIf(height != source.Height, nameof(source.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
-        ThrowHelpers.ThrowIf(width != destination.Width, nameof(destination.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
-        ThrowHelpers.ThrowIf(height != destination.Height, nameof(destination.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNotEqual(source.Width, width);
+        ThrowHelpers.ThrowIfNotEqual(source.Height, height);
+        ThrowHelpers.ThrowIfNotEqual(destination.Width, width);
+        ThrowHelpers.ThrowIfNotEqual(destination.Height, height);
 
         using SafeHandle.Scope source1Handle = Handle.GetScoped();
         IntPtr rawSource1Ptr = source1Handle;
@@ -139,7 +139,7 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
     /// </summary>
     public unsafe void ForEachColumn<TOperation>(TOperation operation) where TOperation : struct, IMapOperation<TValue>
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         long height = Height, width = Width;
         using SafeHandle.Scope scope = Handle.GetScoped();
@@ -159,10 +159,10 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         where TResult : unmanaged
         where TOperation : struct, IMapOperation<TValue, TResult>
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        ThrowHelpers.ThrowIf(destination is null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf(Width != destination.Width, nameof(destination.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
-        ThrowHelpers.ThrowIf(Height != destination.Height, nameof(destination.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
+        ThrowHelpers.ThrowIfNull(destination);
+        ThrowHelpers.ThrowIfNotEqual(Width, destination.Width);
+        ThrowHelpers.ThrowIfNotEqual(Height, destination.Height);
 
         long height = Height, width = Width;
         using SafeHandle.Scope sourceScope = Handle.GetScoped();
@@ -187,15 +187,15 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         where TResult : unmanaged
         where TOperation : struct, IMapOperation<TValue, TSource, TResult>
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        ThrowHelpers.ThrowIf(source is null, nameof(source), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf(destination is null, nameof(destination), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
+        ThrowHelpers.ThrowIfNull(source);
+        ThrowHelpers.ThrowIfNull(destination);
 
         long height = Height, width = Width;
-        ThrowHelpers.ThrowIf(width != source.Width, nameof(source.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
-        ThrowHelpers.ThrowIf(height != source.Height, nameof(source.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
-        ThrowHelpers.ThrowIf(width != destination.Width, nameof(destination.Width), ThrowHelpers.CreateArgumentOutOfRangeException);
-        ThrowHelpers.ThrowIf(height != destination.Height, nameof(destination.Height), ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNotEqual(source.Width, width);
+        ThrowHelpers.ThrowIfNotEqual(source.Height, height);
+        ThrowHelpers.ThrowIfNotEqual(destination.Width, width);
+        ThrowHelpers.ThrowIfNotEqual(destination.Height, height);
 
         using SafeHandle.Scope source1Handle = Handle.GetScoped();
         IntPtr rawSource1Ptr = source1Handle;

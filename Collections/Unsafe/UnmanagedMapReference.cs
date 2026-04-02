@@ -30,11 +30,11 @@ public sealed class UnmanagedMapReference<T> : UnmanagedMap<T> where T : unmanag
     /// <param name="source">The <see cref="UnmanagedMap{T}"/> instance that owns the underlying buffer. This parameter must not be null.</param>
     public UnmanagedMapReference(UnmanagedMapSource<T> source)
     {
-        ThrowHelpers.ThrowIf(source is null, nameof(source), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(source);
         Handle = source.GetHandle();
         bool success = false;
         Handle.DangerousAddRef(ref success);
-        ThrowHelpers.ThrowIf(!success, nameof(source), ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(!success, source);
         Source = source;
     }
 

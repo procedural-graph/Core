@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="$(SolutionDir)Shared\**\*.cs" LinkBase="Shared" />
     <ProjectReference Include="..\Collections\Collections.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
     <PackageReference Include="Microsoft.Extensions.ObjectPool" Version="9.*" />

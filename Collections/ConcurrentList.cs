@@ -31,10 +31,10 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// </param>
     public ConcurrentList(IEnumerable<T> collection, IEqualityComparer<T> comparer)
     {
-        ThrowHelpers.ThrowIf(collection is null, nameof(collection), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(collection);
         _items = [.. collection];
 
-        ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(comparer);
         _comparer = comparer;
     }
 
@@ -47,7 +47,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// </param>
     public ConcurrentList(IEnumerable<T> collection)
     {
-        ThrowHelpers.ThrowIf(collection is null, nameof(collection), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(collection);
         _comparer = EqualityComparer<T>.Default;
         _items = [.. collection];
     }
@@ -60,7 +60,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// </param>
     public ConcurrentList(IEqualityComparer<T> comparer)
     {
-        ThrowHelpers.ThrowIf(comparer is null, nameof(comparer), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(comparer);
         _comparer = comparer;
         _items = [];
     }
@@ -81,7 +81,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
         get => _items[index];
         set
         {
-            ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+            ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
 
             T oldItem;
 
@@ -89,7 +89,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
             do
             {
                 oldList = currentList;
-                ThrowHelpers.ThrowIf((uint)index >= oldList.Count, index, ThrowHelpers.CreateArgumentOutOfRangeException);
+                ThrowHelpers.ThrowIfOutOfRange(index, oldList.Count);
                 oldItem = oldList[index];
                 ImmutableList<T> newList = oldList.Replace(oldItem, value, _comparer);
                 if (ReferenceEquals(newList, oldList))
@@ -108,8 +108,8 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <inheritdoc/>
     public void Add(T item)
     {
-        ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+        ThrowHelpers.ThrowIfNull(item);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
 
         ImmutableList<T>? oldList, currentList = _items;
         do
@@ -126,8 +126,8 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <inheritdoc/>
     public bool Remove(T item)
     {
-        ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+        ThrowHelpers.ThrowIfNull(item);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
 
         ImmutableList<T>? oldList, currentList = _items;
         do
@@ -150,13 +150,13 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <inheritdoc/>
     public void RemoveAt(int index)
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
 
         ImmutableList<T>? oldList, currentList = _items;
         do
         {
             oldList = currentList;
-            ThrowHelpers.ThrowIf((uint)index >= oldList.Count, index, ThrowHelpers.CreateArgumentOutOfRangeException);
+            ThrowHelpers.ThrowIfOutOfRange(index, oldList.Count);
             ImmutableList<T> newList = oldList.RemoveAt(index);
             currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
         }
@@ -180,7 +180,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <inheritdoc/>
     public void Clear()
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
         ImmutableList<T> oldList = Interlocked.Exchange(ref _items, []);
         using ImmutableList<T>.Enumerator enumerator = oldList.GetEnumerator();
         while (enumerator.MoveNext())
@@ -204,7 +204,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
         do
         {
             oldList = currentList;
-            ThrowHelpers.ThrowIf((uint)index >= oldList.Count, index, ThrowHelpers.CreateArgumentOutOfRangeException);
+            ThrowHelpers.ThrowIfOutOfRange(index, oldList.Count);
             ImmutableList<T> newList = oldList.Insert(index, item);
             currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
         }

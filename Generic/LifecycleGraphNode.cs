@@ -73,14 +73,7 @@ public abstract class LifecycleGraphNode<TSceneMember> : IGraphNode, IAsyncLifec
     public void Start(CancellationToken stoppingToken = default)
     {
         bool flagWasSet = TrySetStateFlag(EntityState.Started, out EntityState currentState);
-#if NET7_0_OR_GREATER
-        ObjectDisposedException.ThrowIf((currentState & EntityState.Dead) != 0, this);
-#else
-        if ((currentState & EntityState.Dead) != 0)
-        {
-            throw new ObjectDisposedException(GetType().FullName);
-        }
-#endif
+        ThrowHelpers.ThrowIfDisposed((currentState & EntityState.Dead) != 0, this);
         if (!flagWasSet)
         {
             return;
@@ -103,14 +96,7 @@ public abstract class LifecycleGraphNode<TSceneMember> : IGraphNode, IAsyncLifec
     public async ValueTask StopAsync(CancellationToken stoppingToken = default)
     {
         bool flagWasCleared = TryClearStateFlag(EntityState.Started, out EntityState currentState);
-#if NET7_0_OR_GREATER
-        ObjectDisposedException.ThrowIf((currentState & EntityState.Dead) != 0, this);
-#else
-        if ((currentState & EntityState.Dead) != 0)
-        {
-            throw new ObjectDisposedException(GetType().FullName);
-        }
-#endif
+        ThrowHelpers.ThrowIfDisposed((currentState & EntityState.Dead) != 0, this);
         if (!flagWasCleared)
         {
             Task wait = _lifetimeTcs.Task.WaitAsync(stoppingToken);

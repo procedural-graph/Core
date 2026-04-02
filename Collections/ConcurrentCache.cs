@@ -127,7 +127,7 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     /// specified key.</returns>
     public async ValueTask<TValue> GetOrAddAsync(TKey key, FactoryDelegate factory, CancellationToken cancellationToken = default)
     {
-        ThrowHelpers.ThrowIf(_disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(_disposed, this);
         Entry entry = _entries.GetOrAdd(key, OnAdd, factory);
         _queries.Writer.TryWrite(new AccessQuery(key, DateTime.UtcNow));
         return await entry.Item.WaitAsync(cancellationToken);
@@ -165,7 +165,7 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     /// </returns>
     public async ValueTask<TValue?> RemoveAsync(TKey key, CancellationToken cancellationToken = default)
     {
-        ThrowHelpers.ThrowIf(_disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(_disposed, this);
 
         if (!TryRemove(key, out Entry result))
         {
@@ -195,7 +195,7 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     /// </returns>
     public bool Invalidate(TKey key)
     {
-        ThrowHelpers.ThrowIf(_disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(_disposed, this);
 
         if (TryRemove(key, out Entry result))
         {
@@ -217,7 +217,7 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
     /// <exception cref="InvalidOperationException">Thrown if this method is called more than once on the same instance.</exception>
     public async Task HandleRequestsAsync(CancellationToken cancellationToken)
     {
-        ThrowHelpers.ThrowIf(_disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(_disposed, this);
         CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (Interlocked.CompareExchange(ref _cts, cts, null) is { })
         {

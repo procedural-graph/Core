@@ -29,7 +29,7 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
         {
             bool success = false;
             parent.DangerousAddRef(ref success);
-            ThrowHelpers.ThrowIf(!success, parent, ThrowHelpers.CreateObjectDisposedException);
+            ThrowHelpers.ThrowIfDisposed(!success, parent);
 
             _parent = parent;
 
@@ -79,7 +79,7 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
         {
             bool success = false;
             parent.DangerousAddRef(ref success);
-            ThrowHelpers.ThrowIf(!success, parent, ThrowHelpers.CreateObjectDisposedException);
+            ThrowHelpers.ThrowIfDisposed(!success, parent);
             _parent = parent;
             if (length <= 0)
             {
@@ -112,7 +112,7 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
 
         public void Reset()
         {
-            ThrowHelpers.ThrowIf(_parent is null, this, ThrowHelpers.CreateObjectDisposedException);
+            ThrowHelpers.ThrowIfDisposed(_parent is null, this);
             _current = ((T*)_parent.DangerousGetHandle()) - 1;
         }
     }
@@ -168,7 +168,7 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
 
     private AllocEnumerator GetAllocatingEnumerator()
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         return new AllocEnumerator(Handle, Length);
     }
 
@@ -178,9 +178,9 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
     /// <inheritdoc/>
     public void CopyTo(T[] array, int arrayIndex)
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
-        ThrowHelpers.ThrowIf(array is null, nameof(array), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf((uint)arrayIndex > array.Length, arrayIndex, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
+        ThrowHelpers.ThrowIfNull(array);
+        ThrowHelpers.ThrowIfOutOfRange(arrayIndex, array.Length);
         if ((array.Length - arrayIndex) < Length)
         {
             throw new ArgumentException($"The number of elements in the source collection is greater than the available space from {nameof(arrayIndex)} to the end of the destination array.");
@@ -188,8 +188,8 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
         using SafeHandle.Scope scope = Handle.GetScoped();
         fixed (T* destination = &array[arrayIndex])
         {
-            UnmanagedMarshal.Copy((T*)scope, destination, Length);
-        }
+            UnmanagedMarshal.Copy((T*)(void*)scope, destination, Length);
+        }   
     }
 
     /// <summary>
@@ -233,7 +233,7 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
 
     internal SafeHandle GetHandle()
     {
-        ThrowHelpers.ThrowIf(Disposed, this, ThrowHelpers.CreateObjectDisposedException);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         return Handle;
     }
 

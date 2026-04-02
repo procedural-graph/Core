@@ -89,14 +89,14 @@ public struct Double2 : IVector2<Double2, double>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         readonly get
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.GetComponent(in this, index, out double value);
             return value;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.SetComponent(ref this, index, value);
         }
     }

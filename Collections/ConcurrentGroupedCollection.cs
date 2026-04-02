@@ -108,7 +108,7 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// <param name="keySelector">A function that extracts the grouping key from each item. Cannot be <see langword="null"/>.</param>
     public ConcurrentGroupedCollection(Func<TItem, TKey?> keySelector)
     {
-        ThrowHelpers.ThrowIf(keySelector is null, nameof(keySelector), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(keySelector);
         _items = new ConcurrentDictionary<object, ImmutableHashSet<TItem>>();
         _keySelector = keySelector;
     }
@@ -120,8 +120,8 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// <returns><see langword="true"/> if the item was successfully added; otherwise, <see langword="false"/>.</returns>
     public bool Add(TItem item)
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
-        ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfNull(item);
 
         if (TryAdd(item))
         {
@@ -143,7 +143,7 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// <returns><see langword="true"/> if the key was found and its items were removed; otherwise, <see langword="false"/>.</returns>
     public bool Remove(TKey? key, out ImmutableHashSet<TItem> items)
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
 
         if (_items.TryRemove(key ?? _defaultKey, out ImmutableHashSet<TItem>? value))
         {
@@ -166,8 +166,8 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// <inheritdoc/>
     public bool Remove(TItem item)
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
-        ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfNull(item);
 
         object key = _keySelector(item) ?? _defaultKey;
 
@@ -223,7 +223,7 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// <inheritdoc/>
     public override bool Contains(TItem item)
     {
-        ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIfNull(item);
 
         object key = _keySelector(item) ?? _defaultKey;
 
@@ -238,8 +238,8 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// <inheritdoc/>
     public override int CopyTo(TItem[] array, int arrayIndex)
     {
-        ThrowHelpers.ThrowIf(array is null, nameof(array), ThrowHelpers.CreateArgumentNullException);
-        ThrowHelpers.ThrowIf((uint)arrayIndex > array.Length, arrayIndex, ThrowHelpers.CreateArgumentOutOfRangeException);
+        ThrowHelpers.ThrowIfNull(array, nameof(array));
+        ThrowHelpers.ThrowIfOutOfRange(arrayIndex, array.Length);
         if ((array.Length - arrayIndex) < Count)
         {
             throw new ArgumentException(
@@ -257,8 +257,8 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
 
     private bool TryAdd(TItem item)
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError, ThrowHelpers.CreateInvalidOperationException);
-        ThrowHelpers.ThrowIf(item is null, nameof(item), ThrowHelpers.CreateArgumentNullException);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfNull(item);
 
         object key = _keySelector(item) ?? _defaultKey;
 

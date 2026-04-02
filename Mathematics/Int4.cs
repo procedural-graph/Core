@@ -5,8 +5,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 #if NETCOREAPP3_0_OR_GREATER
 using System.Runtime.Intrinsics;
-using Newtonsoft.Json.Linq;
-
 #endif
 #if NET7_0_OR_GREATER
 using System.Numerics;
@@ -82,14 +80,14 @@ internal struct Int4 : IVector4<Int4, short>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         readonly get
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.GetComponent(in this, index, out short result);
             return result;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
         {
-            Utils.ThrowIfOutOfRange(index, Count);
+            ThrowHelpers.ThrowIfOutOfRange(index, Count);
             VectorMath.SetComponent(ref this, index, value);
         }
     }

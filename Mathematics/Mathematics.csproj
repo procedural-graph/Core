@@ -10,6 +10,10 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="$(SolutionDir)Shared\ThrowHelpers.cs" LinkBase="Shared" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.*" />
     <PackageReference Include="System.Numerics.Vectors" Version="4.6.*" /> 

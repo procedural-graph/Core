@@ -1,6 +1,4 @@
-﻿using System;
-using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
 
 namespace ProceduralGraph.Mathematics;
 
@@ -47,23 +45,5 @@ internal static class Utils
         ref byte address = ref Unsafe.As<TTo, byte>(ref result);
         Unsafe.WriteUnaligned(ref address, value);
         return result;
-    }
-
-#if NET6_0_OR_GREATER
-    [System.Diagnostics.StackTraceHidden]
-#endif
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static void ThrowIfOutOfRange(int index, int count, [CallerArgumentExpression(nameof(index))] string? paramName = null)
-    {
-        if ((uint)index >= count)
-        {
-            ThrowOutOfRangeException(index, $"Must be a non-negative integer less than {count}.", paramName);
-        }
-    }
-
-    [DoesNotReturn]
-    internal static void ThrowOutOfRangeException(int value, string message, [CallerArgumentExpression(nameof(value))] string? paramName = null)
-    {
-        throw new ArgumentOutOfRangeException(paramName, value, message);
     }
 }

@@ -10,6 +10,11 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
+  <ItemGroup>
+    <Compile Include="$(SolutionDir)Shared\ThrowHelpers.cs" LinkBase="Shared" />
+    <Compile Include="$(SolutionDir)Shared\TaskExtensions.cs" LinkBase="Shared" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
     <PackageReference Include="System.Threading.Channels" Version="10.*" />
     <PackageReference Include="System.Collections.Immutable" Version="10.*" />
