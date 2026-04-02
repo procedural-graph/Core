@@ -3,7 +3,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-
 #if NET7_0_OR_GREATER
 using System.Numerics;
 #endif
@@ -84,26 +83,31 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     }
 
     /// <inheritdoc/>
+    public static int Count => 4;
+
+    private readonly short LengthSquared => ((Int4)this).LengthSquared;
+    readonly byte IVector<Pixel32, byte>.LengthSquared => Clamp(LengthSquared);
+    readonly float IVector<Pixel32, byte>.Length => FastMath.SqrtEstimate(LengthSquared);
+
+    /// <inheritdoc cref="IVector{TVector, TComponent}.Sum"/>
+    public readonly short Sum => ((Int4)this).Sum;
+    readonly byte IVector<Pixel32, byte>.Sum => Clamp(Sum);
+
+    /// <inheritdoc/>
     public byte this[int index]
     {
-        readonly get => index switch
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        readonly get
         {
-            0 => Red,
-            1 => Green,
-            2 => Blue,
-            3 => Alpha,
-            _ => throw new IndexOutOfRangeException($"Index must be in the range [0, 3].")
-        };
+            Utils.ThrowIfOutOfRange(index, Count);
+            VectorMath.GetComponent(in this, index, out byte value);
+            return value;
+        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
         {
-            switch (index)
-            {
-                case 0: Red = value; break;
-                case 1: Green = value; break;
-                case 2: Blue = value; break;
-                case 3: Alpha = value; break;
-                default: throw new IndexOutOfRangeException($"Index must be in the range [0, 3].");
-            }
+            Utils.ThrowIfOutOfRange(index, Count);
+            VectorMath.SetComponent(ref this, index, value);
         }
     }
 
@@ -122,15 +126,18 @@ public struct Pixel32 : IVector4<Pixel32, byte>
         Alpha = alpha;
     }
 
-#if NET7_0_OR_GREATER
-    private Pixel32(int red, int green, int blue, int alpha)
+    /// <summary>
+    /// Initializes a new instance of <see cref="Pixel32"/> whose components all have the same value.
+    /// </summary>
+    /// <returns/>
+    /// <inheritdoc cref="Create(byte)"/>
+    public Pixel32(byte value)
     {
-        Red = byte.CreateSaturating(red);
-        Green = byte.CreateSaturating(green);
-        Blue = byte.CreateSaturating(blue);
-        Alpha = byte.CreateSaturating(alpha);
+        Red = value;
+        Green = value;
+        Blue = value;
+        Alpha = value;
     }
-#endif
 
     /// <summary>
     /// Deconstructs the instance into its red, green, blue, and alpha channel values.
@@ -147,33 +154,22 @@ public struct Pixel32 : IVector4<Pixel32, byte>
         alpha = Alpha;
     }
 
-#if NET7_0_OR_GREATER
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool Equals(Pixel32 other)
     {
         return ((int)this) == (int)other;
     }
 
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override readonly int GetHashCode()
     {
         return ((int)this).GetHashCode();
     }
-#else
-    /// <inheritdoc/>
-    public readonly bool Equals(Pixel32 other)
-    {
-        return Red == other.Red && Green == other.Green && Blue == other.Blue && Alpha == other.Alpha;
-    }
 
     /// <inheritdoc/>
-    public override readonly int GetHashCode()
-    {
-        return HashCode.Combine(Red, Green, Blue, Alpha);
-    }
-#endif
-
-    /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public override readonly bool Equals([NotNullWhen(true)] object? obj)
     {
         return obj is Pixel32 other && Equals(other);
@@ -194,9 +190,104 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     }
 
     /// <inheritdoc/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Pixel32 Create(byte value)
     {
-        return new Pixel32(value, value, value, value);
+        return new Pixel32(value);
+    }
+
+    /// <inheritdoc/>
+    public static Pixel32 Min(in Pixel32 left, in Pixel32 right)
+    {
+        return (Pixel32)Int4.Min((Int4)left, (Int4)right);
+    }
+
+    /// <inheritdoc/>
+    public static Pixel32 Max(in Pixel32 left, in Pixel32 right)
+    {
+        return (Pixel32)Int4.Max((Int4)left, (Int4)right);
+    }
+
+    /// <inheritdoc/>
+    public static Pixel32 Clamp(in Pixel32 value, in Pixel32 min, in Pixel32 max)
+    {
+        return (Pixel32)Int4.Clamp((Int4)value, (Int4)min, (Int4)max);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static byte Clamp(short value, byte min = byte.MinValue, byte max = byte.MaxValue)
+    {
+        if (value < min)
+        {
+            return min;
+        }
+
+        if (value > max)
+        {
+            return max;
+        }
+
+        return (byte)value;
+    }
+
+#if NET7_0_OR_GREATER
+    static byte IVector<Pixel32, byte>.Dot(in Pixel32 left, in Pixel32 right)
+    {
+        short result = Int4.Dot((Int4)left, (Int4)right);
+        return Clamp(result);
+    }
+
+    static Pixel32 IVector<Pixel32, byte>.Abs(in Pixel32 vector)
+    {
+        return vector;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static Pixel32 IAdditionOperators<Pixel32, Pixel32, Pixel32>.operator +(Pixel32 left, Pixel32 right)
+    {
+        return (Pixel32)((Int4)left + (Int4)right);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static Pixel32 IAdditionOperators<Pixel32, byte, Pixel32>.operator +(Pixel32 left, byte right)
+    {
+        return (Pixel32)((Int4)left + right);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static Pixel32 ISubtractionOperators<Pixel32, Pixel32, Pixel32>.operator -(Pixel32 left, Pixel32 right)
+    {
+        return (Pixel32)((Int4)left - (Int4)right);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static Pixel32 ISubtractionOperators<Pixel32, byte, Pixel32>.operator -(Pixel32 left, byte right)
+    {
+        return (Pixel32)((Int4)left - right);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static Pixel32 IMultiplyOperators<Pixel32, Pixel32, Pixel32>.operator *(Pixel32 left, Pixel32 right)
+    {
+        return (Pixel32)((Int4)left * (Int4)right);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static Pixel32 IMultiplyOperators<Pixel32, byte, Pixel32>.operator *(Pixel32 left, byte right)
+    {
+        return (Pixel32)((Int4)left * right);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static Pixel32 IDivisionOperators<Pixel32, Pixel32, Pixel32>.operator /(Pixel32 left, Pixel32 right)
+    {
+        return (Pixel32)((Int4)left / (Int4)right);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    static Pixel32 IDivisionOperators<Pixel32, byte, Pixel32>.operator /(Pixel32 left, byte right)
+    {
+        return (Pixel32)((Int4)left / right);
     }
 
     /// <inheritdoc/>
@@ -268,47 +359,7 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     {
         return ((Pixel128)left) / right;
     }
-
-#if NET7_0_OR_GREATER
-    static Pixel32 IAdditionOperators<Pixel32, Pixel32, Pixel32>.operator +(Pixel32 left, Pixel32 right)
-    {
-        return new Pixel32(left.Red + right.Red, left.Green + right.Green, left.Blue + right.Blue, left.Alpha + right.Alpha);
-    }
-
-    static Pixel32 IAdditionOperators<Pixel32, byte, Pixel32>.operator +(Pixel32 left, byte right)
-    {
-        return new Pixel32(left.Red + right, left.Green + right, left.Blue + right, left.Alpha + right);
-    }
-
-    static Pixel32 ISubtractionOperators<Pixel32, Pixel32, Pixel32>.operator -(Pixel32 left, Pixel32 right)
-    {
-        return new Pixel32(left.Red - right.Red, left.Green - right.Green, left.Blue - right.Blue, left.Alpha - right.Alpha);
-    }
-
-    static Pixel32 ISubtractionOperators<Pixel32, byte, Pixel32>.operator -(Pixel32 left, byte right)
-    {
-        return new Pixel32(left.Red - right, left.Green - right, left.Blue - right, left.Alpha - right);
-    }
-
-    static Pixel32 IMultiplyOperators<Pixel32, Pixel32, Pixel32>.operator *(Pixel32 left, Pixel32 right)
-    {
-        return new Pixel32(left.Red * right.Red, left.Green * right.Green, left.Blue * right.Blue, left.Alpha * right.Alpha);
-    }
-
-    static Pixel32 IMultiplyOperators<Pixel32, byte, Pixel32>.operator *(Pixel32 left, byte right)
-    {
-        return new Pixel32(left.Red * right, left.Green * right, left.Blue * right, left.Alpha * right);
-    }
-
-    static Pixel32 IDivisionOperators<Pixel32, Pixel32, Pixel32>.operator /(Pixel32 left, Pixel32 right)
-    {
-        return new Pixel32(left.Red / right.Red, left.Green / right.Green, left.Blue / right.Blue, left.Alpha / right.Alpha);
-    }
-
-    static Pixel32 IDivisionOperators<Pixel32, byte, Pixel32>.operator /(Pixel32 left, byte right)
-    {
-        return new Pixel32(left.Red / right, left.Green / right, left.Blue / right, left.Alpha / right);
-    }
+#endif
 
     /// <summary>
     /// Explicitly converts a <see cref="Pixel32"/> to an <see cref="int"/>.
@@ -317,7 +368,7 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static explicit operator int(Pixel32 value)
     {
-        return Unsafe.BitCast<Pixel32, int>(value);
+        return Utils.ReinterpretCast<Pixel32, int>(value);
     }
 
     /// <summary>
@@ -327,7 +378,7 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static explicit operator Pixel32(int value)
     {
-        return Unsafe.BitCast<int, Pixel32>(value);
+        return Utils.ReinterpretCast<int, Pixel32>(value);
     }
 
     /// <summary>
@@ -337,7 +388,7 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static explicit operator uint(Pixel32 value)
     {
-        return Unsafe.BitCast<Pixel32, uint>(value);
+        return Utils.ReinterpretCast<Pixel32, uint>(value);
     }
 
     /// <summary>
@@ -347,7 +398,17 @@ public struct Pixel32 : IVector4<Pixel32, byte>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static explicit operator Pixel32(uint value)
     {
-        return Unsafe.BitCast<uint, Pixel32>(value);
+        return Utils.ReinterpretCast<uint, Pixel32>(value);
     }
-#endif
+
+    /// <summary>
+    /// Converts an <see cref="Pixel128"/> to an <see cref="Pixel32"/> by mapping each channel from floating-point to byte
+    /// precision.
+    /// </summary>
+    /// <param name="value">The <see cref="Pixel128"/> instance to convert. Each channel should be in the range 0.0 to 1.0.</param>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static explicit operator Pixel32(Pixel128 value)
+    {
+        return (Pixel32)(Int4)(value * 255.0f);
+    }
 }

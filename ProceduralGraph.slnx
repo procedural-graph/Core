@@ -4,6 +4,7 @@
     <Project Path="modules/terrain/Core/Core.csproj" Id="b8023df7-591e-4018-bdfa-93b22eb4258a" />
     <Project Path="modules/terrain/Generic/Generic.csproj" Id="c63a0347-24bc-4442-b1fc-dddc81c99aa0" />
   </Folder>
+  <Project Path="Benchmarks/Benchmarks.csproj" Id="3b26590f-2167-4450-830f-b4c821e30ce6" />
   <Project Path="Collections/Collections.csproj" />
   <Project Path="Core/Core.csproj" />
   <Project Path="Generic/Generic.csproj" />
