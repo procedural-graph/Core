@@ -82,7 +82,6 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
         set
         {
             ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
-
             T oldItem;
 
             ImmutableList<T>? oldList, currentList = _items;
@@ -111,16 +110,10 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
         ThrowHelpers.ThrowIfNull(item);
         ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
 
-        ImmutableList<T>? oldList, currentList = _items;
-        do
+        if (ImmutableInterlocked.Update(ref _items, static (l, i) => l.Add(i), item))
         {
-            oldList = currentList;
-            ImmutableList<T> newList = oldList.Add(item);
-            currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
+            RaiseCollectionChanged(item, ItemChangeType.Added);
         }
-        while (!ReferenceEquals(currentList, oldList));
-
-        RaiseCollectionChanged(item, ItemChangeType.Added);
     }
 
     /// <inheritdoc/>
@@ -129,29 +122,19 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
         ThrowHelpers.ThrowIfNull(item);
         ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
 
-        ImmutableList<T>? oldList, currentList = _items;
-        do
+        if (ImmutableInterlocked.Update(ref _items, static (l, i) => l.Remove(i), item))
         {
-            oldList = currentList;
-            ImmutableList<T> newList = oldList.Remove(item, _comparer);
-            if (ReferenceEquals(newList, oldList))
-            {
-                return false;
-            }
-            currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
+            RaiseCollectionChanged(item, ItemChangeType.Removed);
+            return true;
         }
-        while (!ReferenceEquals(currentList, oldList));
 
-        RaiseCollectionChanged(item, ItemChangeType.Removed);
-
-        return true;
+        return false;
     }
 
     /// <inheritdoc/>
     public void RemoveAt(int index)
     {
         ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
-
         ImmutableList<T>? oldList, currentList = _items;
         do
         {
@@ -182,10 +165,9 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     {
         ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
         ImmutableList<T> oldList = Interlocked.Exchange(ref _items, []);
-        using ImmutableList<T>.Enumerator enumerator = oldList.GetEnumerator();
-        while (enumerator.MoveNext())
+        foreach (T item in oldList)
         {
-            RaiseCollectionChanged(enumerator.Current, ItemChangeType.Removed);
+            RaiseCollectionChanged(item, ItemChangeType.Removed);
         }
     }
 
@@ -200,16 +182,18 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <inheritdoc/>
     public void Insert(int index, T item)
     {
-        ImmutableList<T>? oldList, currentList = _items;
-        do
+        ThrowHelpers.ThrowIfNull(item);
+        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        if (ImmutableInterlocked.Update(ref _items, Insert, new KeyValuePair<int, T>(index, item)))
         {
-            oldList = currentList;
-            ThrowHelpers.ThrowIfOutOfRange(index, oldList.Count);
-            ImmutableList<T> newList = oldList.Insert(index, item);
-            currentList = Interlocked.CompareExchange(ref _items, newList, oldList);
+            RaiseCollectionChanged(item, ItemChangeType.Added);
         }
-        while (!ReferenceEquals(currentList, oldList));
-        RaiseCollectionChanged(item, ItemChangeType.Added);
+    }
+
+    private ImmutableList<T> Insert(ImmutableList<T> list, KeyValuePair<int, T> pair)
+    {
+        ThrowHelpers.ThrowIfOutOfRange(pair.Key, list.Count);
+        return list.Insert(pair.Key, pair.Value);
     }
 
     /// <inheritdoc/>
