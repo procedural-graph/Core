@@ -98,6 +98,7 @@ public struct Pixel128 : IVector4<Pixel128, float>
 
     readonly float IVector<Pixel128, float>.Length => FastMath.SqrtEstimate(LengthSquared);
 
+    /// <inheritdoc/>
     public readonly float Sum
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
