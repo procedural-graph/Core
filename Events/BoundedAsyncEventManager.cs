@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Buffers;
+using System.Collections;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -39,10 +42,13 @@ public sealed class BoundedAsyncEventManager<TArgs>(ILogger logger, BoundedChann
     /// <param name="cancellationToken">A cancellation token that can be used to cancel the publish operation.</param>
     /// <returns>A <see cref="ValueTask"/> that represents the asynchronous publish operation.</returns>
     /// <exception cref="OperationCanceledException">Thrown if the operation is canceled.</exception>
+    /// <inheritdoc cref="AsyncEventManager{TArgs}.Subscribe(AsyncEventHandler{TArgs})"/>
     public async ValueTask PublishAsync(TArgs args, CancellationToken cancellationToken = default)
     {
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         Collection items = Subscriptions;
         Task[] tasks = ArrayPool<Task>.Shared.Rent(items.Count);
+        AggregateException? aggregateException = null;
         try
         {
             int taskIndex = 0;
@@ -60,13 +66,13 @@ public sealed class BoundedAsyncEventManager<TArgs>(ILogger logger, BoundedChann
                 {
                     invokeTask.GetAwaiter().GetResult();
                 }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
                 catch (Exception ex)
                 {
-                    Logger.LogException(ex);
+                    aggregateException = AppendException(aggregateException, ex);
+                    if (ex is OperationCanceledException)
+                    {
+                        break;
+                    }
                 }
             }
 
@@ -82,17 +88,18 @@ public sealed class BoundedAsyncEventManager<TArgs>(ILogger logger, BoundedChann
 #endif
             await wait.ConfigureAwait(false);
         }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
         catch (Exception ex)
         {
-            Logger.LogException(ex);
+            aggregateException = AppendException(aggregateException, ex);
         }
         finally
         {
             ArrayPool<Task>.Shared.Return(tasks, clearArray: true);
+        }
+
+        if (aggregateException is { })
+        {
+            throw aggregateException;
         }
     }
 
@@ -101,11 +108,40 @@ public sealed class BoundedAsyncEventManager<TArgs>(ILogger logger, BoundedChann
     /// </summary>
     /// <param name="args">The event data to pass to each event handler.</param>
     /// <exception cref="InvalidOperationException">Thrown if any event handler cannot be completed synchronously.</exception>
+    /// <inheritdoc cref="AsyncEventManager{TArgs}.Subscribe(AsyncEventHandler{TArgs})"/>
     public void Publish(TArgs args)
     {
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         foreach (AsyncEventPublisher<TArgs> subscription in Subscriptions)
         {
             ThrowHelpers.ThrowIf(!subscription.TryInvoke(args), "Event handler could not be completed synchronously.");
+        }
+    }
+
+    private static AggregateException AppendException(AggregateException? aggregate, Exception exception)
+    {
+        IEnumerable<Exception> aggregateExceptions = EnumerateExceptions(aggregate);
+        IEnumerable<Exception> additionalExceptions = EnumerateExceptions(exception);
+        return new AggregateException(aggregateExceptions.Concat(additionalExceptions));
+    }
+
+    private static IEnumerable<Exception> EnumerateExceptions(Exception? exception)
+    {
+        if (exception is null)
+        {
+            yield break;
+        }
+
+        if (exception is AggregateException aggregateException)
+        {
+            foreach (Exception inner in aggregateException.InnerExceptions)
+            {
+                yield return inner;
+            }
+        }
+        else
+        {
+            yield return exception;
         }
     }
 }

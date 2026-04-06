@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Runtime.CompilerServices;
@@ -11,7 +12,7 @@ namespace ProceduralGraph.Events;
 /// Represents a manager for asynchronous events with arguments of type <typeparamref name="TArgs"/>.
 /// </summary>
 /// <inheritdoc cref="AsyncEventHandler{TArgs}"/>
-public abstract class AsyncEventManager<TArgs>
+public abstract class AsyncEventManager<TArgs> : IDisposable
 {
     /// <inheritdoc cref="IEnumerator{T}"/>
     public ref struct Enumerator
@@ -90,10 +91,22 @@ public abstract class AsyncEventManager<TArgs>
     protected abstract ILogger Logger { get; }
 
     private ImmutableArray<AsyncEventSubscription<TArgs>> _subscriptions = [];
+    private int _disposed;
+    /// <summary>
+    /// Gets a value indicating whether the event manager has been disposed.
+    /// </summary>
+    protected bool IsDisposed => Volatile.Read(ref _disposed) == 1;
+
     /// <summary>
     /// Gets a collection of the current subscriptions to the asynchronous event.
     /// </summary>
     protected Collection Subscriptions => new(_subscriptions);
+
+#if NET9_0_OR_GREATER
+    private readonly Lock _syncRoot = new();
+#else
+    private readonly object _syncRoot = new();
+#endif
 
     /// <summary>
     /// Adds the specified callback to the list of subscribers.
@@ -103,31 +116,46 @@ public abstract class AsyncEventManager<TArgs>
     /// Cannot be <see langword="null"/>.
     /// </param>
     /// <returns>A subscription object that can be used to unsubscribe the callback.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown when the event manager has been disposed.</exception>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public AsyncEventSubscription<TArgs> Subscribe(AsyncEventHandler<TArgs> handler)
     {
-        AsyncEventSubscription<TArgs> newSubscription = new(handler, Logger);
-
-        while (!ImmutableInterlocked.Update(ref _subscriptions, static (a, s) => a.Add(s), newSubscription))
+        ImmutableArray<AsyncEventSubscription<TArgs>> currentSubscriptions = _subscriptions, oldSubscriptions;
+        while (true)
         {
-            foreach (AsyncEventSubscription<TArgs> subscription in _subscriptions)
+            ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+
+            for (int i = 0; i < currentSubscriptions.Length; i++)
             {
-                if (!ReferenceEquals(subscription.Event, handler))
+                AsyncEventSubscription<TArgs> subscription = currentSubscriptions[i];
+                if (ReferenceEquals(subscription.Event, handler))
+                {
+                    return subscription;
+                }
+            }
+
+            lock (_syncRoot)
+            {
+                (oldSubscriptions, currentSubscriptions) = (currentSubscriptions, _subscriptions);
+
+                if (currentSubscriptions != oldSubscriptions)
                 {
                     continue;
                 }
 
-                return subscription;
+                AsyncEventSubscription<TArgs> newSubscription = new(handler, Logger);
+
+                Channel<TArgs> channel = CreateChannel();
+                CancellationToken cancellationToken = newSubscription.Start(channel);
+
+                cancellationToken.Register(static s => ((ChannelWriter<TArgs>)s!).TryComplete(), channel.Writer);
+                cancellationToken.Register(Unsubscribe, newSubscription);
+
+                _subscriptions = currentSubscriptions.Add(newSubscription);
+
+                return newSubscription;
             }
         }
-
-        Channel<TArgs> channel = CreateChannel();
-        CancellationToken cancellationToken = newSubscription.Start(channel);
-
-        cancellationToken.Register(static s => ((ChannelWriter<TArgs>)s!).TryComplete(), channel.Writer);
-        cancellationToken.Register(Unsubscribe, newSubscription);
-
-        return newSubscription;
     }
 
     /// <summary>
@@ -138,6 +166,52 @@ public abstract class AsyncEventManager<TArgs>
 
     private void Unsubscribe(object? state)
     {
-        ImmutableInterlocked.Update(ref _subscriptions, static (a, s) => a.Remove(s), (AsyncEventSubscription<TArgs>)state!);
+        if (Volatile.Read(ref _disposed) == 1) 
+        {
+            return;
+        }
+
+        lock (_syncRoot)
+        {
+            _subscriptions = _subscriptions.Remove((AsyncEventSubscription<TArgs>)state!);
+        }
+    }
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the object and, optionally, releases the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true"/> to release both managed and unmanaged resources; <see langword="false"/> to 
+    /// release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 1)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            ImmutableArray<AsyncEventSubscription<TArgs>> subscriptions;
+
+            lock (_syncRoot)
+            {
+                subscriptions = _subscriptions;
+                _subscriptions = [];
+            }
+
+            foreach (AsyncEventSubscription<TArgs> subscription in subscriptions)
+            {
+                subscription.Dispose();
+            }
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        GC.SuppressFinalize(this);
     }
 }

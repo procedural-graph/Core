@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Threading;
 using System.Threading.Channels;
 
 namespace ProceduralGraph.Events;
@@ -31,8 +30,11 @@ public sealed class UnboundedAsyncEventManager<TArgs>(ILogger logger, UnboundedC
     /// Invokes all registered event handlers with the specified event arguments.
     /// </summary>
     /// <param name="args">The event data to pass to each event handler.</param>
+    /// <returns/>
+    /// <inheritdoc cref="AsyncEventManager{TArgs}.Subscribe(AsyncEventHandler{TArgs})"/>
     public void Publish(TArgs args)
     {
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         foreach (AsyncEventPublisher<TArgs> publisher in Subscriptions)
         {
             publisher.TryInvoke(args);

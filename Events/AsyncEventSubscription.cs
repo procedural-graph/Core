@@ -15,7 +15,7 @@ public sealed class AsyncEventSubscription<TArgs> : IDisposable, IAsyncDisposabl
     private readonly ILogger _logger;
     private CancellationTokenSource? _cts;
     private Task _invocationHandler;
-    private volatile bool _disposed;
+    private int _disposed;
 
     internal AsyncEventHandler<TArgs> Event;
 
@@ -45,7 +45,7 @@ public sealed class AsyncEventSubscription<TArgs> : IDisposable, IAsyncDisposabl
 
     internal CancellationToken Start(Channel<TArgs> channel)
     {
-        ThrowHelpers.ThrowIfDisposed(_disposed, this);
+        ThrowHelpers.ThrowIfDisposed(Volatile.Read(ref _disposed) == 1, this);
 
         CancellationTokenSource? newCts = new(), oldCts = Interlocked.CompareExchange(ref _cts, newCts, null);
 
@@ -80,37 +80,32 @@ public sealed class AsyncEventSubscription<TArgs> : IDisposable, IAsyncDisposabl
         }
     }
 
-    private void Dispose(bool disposing)
-    {
-        if (disposing && _cts is { })
-        {
-            try
-            {
-                _cts.Cancel();
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogException(ex);
-            }
-            finally
-            {
-                _cts.Dispose();
-            }
-        }
-
-        _disposed = true;
-    }
-
     /// <inheritdoc/>
     public void Dispose()
     {
-        Dispose(disposing: true);
+        if (Interlocked.Exchange(ref _disposed, 1) == 1 || _cts is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _cts.Cancel();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogException(ex);
+        }
+        finally
+        {
+            _cts.Dispose();
+        }
     }
 
     /// <inheritdoc/>
     public async ValueTask DisposeAsync()
     {
-        Dispose(disposing: true);
+        Dispose();
 
         try
         {
