@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="$(SolutionDir)Shared\ThrowHelpers.cs" LinkBase="Shared" />
+    <Compile Include="..\Shared\ThrowHelpers.cs" LinkBase="Shared" />
   </ItemGroup>
   
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">

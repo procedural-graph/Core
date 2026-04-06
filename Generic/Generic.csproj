@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="$(SolutionDir)Shared\**\*.cs" LinkBase="Shared" />
+    <Compile Include="..\Shared\**\*.cs" LinkBase="Shared" />
     <ProjectReference Include="..\Collections\Collections.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\Events\Events.csproj" />
