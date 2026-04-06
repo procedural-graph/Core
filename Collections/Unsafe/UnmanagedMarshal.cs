@@ -238,7 +238,6 @@ public static partial class UnmanagedMarshal
     /// <summary>
     /// Copies a specified number of elements from a source memory location to a destination memory location.
     /// </summary>
-    /// <typeparam name="T">The type of elements to copy. Must be an unmanaged type.</typeparam>
     /// <param name="source">A pointer to the source memory location from which elements are copied. Cannot be null.</param>
     /// <param name="destination">A pointer to the destination memory location where elements are copied. Cannot be null.</param>
     /// <param name="byteCount">The number of bytes to copy from the source to the destination. Must be a non-negative integer.</param>
