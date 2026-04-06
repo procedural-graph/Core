@@ -1,5 +1,6 @@
 ﻿using Microsoft.Extensions.ObjectPool;
 using System;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -98,19 +99,36 @@ public static class Extensions
         return new SceneMemberHandle<TSceneMember>(parent, manager);
     }
 
-#if NETFRAMEWORK
-    internal static bool TryPop<T>(this Stack<T> stack, [NotNullWhen(true)] out T? result) where T : notnull
+    /// <summary>
+    /// Attempts to find the closest ascendant scene member of the specified entity.
+    /// </summary>
+    /// <param name="entity">The entity whose ancestors to search.</param>
+    /// <param name="result">
+    /// When this method returns, contains the closest ascendant scene member if found; 
+    /// otherwise, <see langword="null"/>.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> if an ascendant scene member is found; 
+    /// otherwise, <see langword="false"/>.
+    /// </returns>
+    /// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
+    public static bool TryFindAncestor<TSceneMember>([DisallowNull] this GraphEntity<TSceneMember>? entity, [NotNullWhen(true)] out TSceneMember? result)
+        where TSceneMember : class
     {
-        if (stack.Count > 0)
+        result = null;
+        do
         {
-            result = stack.Pop();
-            return true;
-        }
+            if (entity is IProxyGraphNode<TSceneMember> proxyNode)
+            {
+                result = proxyNode.SceneMember;
+                return true;
+            }
 
-        result = default;
+            entity = entity.Parent;
+        }
+        while (entity is { });
         return false;
     }
-#endif
 
     private static void OnTaskFaulted(Task task, object? context)
     {
