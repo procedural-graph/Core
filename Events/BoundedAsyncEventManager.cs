@@ -46,7 +46,7 @@ public sealed class BoundedAsyncEventManager<TArgs>(ILogger logger, BoundedChann
     public async ValueTask PublishAsync(TArgs args, CancellationToken cancellationToken = default)
     {
         ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
-        Collection items = Subscriptions;
+        Collection items = Publishers;
         Task[] tasks = ArrayPool<Task>.Shared.Rent(items.Count);
         AggregateException? aggregateException = null;
         try
@@ -112,7 +112,7 @@ public sealed class BoundedAsyncEventManager<TArgs>(ILogger logger, BoundedChann
     public void Publish(TArgs args)
     {
         ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
-        foreach (AsyncEventPublisher<TArgs> subscription in Subscriptions)
+        foreach (AsyncEventPublisher<TArgs> subscription in Publishers)
         {
             ThrowHelpers.ThrowIf(!subscription.TryInvoke(args), "Event handler could not be completed synchronously.");
         }

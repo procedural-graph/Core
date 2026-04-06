@@ -48,7 +48,7 @@ public abstract class AsyncEventManager<TArgs> : IDisposable
     }
 
     /// <summary>
-    /// Represents a read-only collection of asynchronous event subscriptions.
+    /// Represents a read-only collection of asynchronous event publishers.
     /// </summary>
     public readonly ref struct Collection : IReadOnlyCollection<AsyncEventPublisher<TArgs>>
     {
@@ -98,9 +98,9 @@ public abstract class AsyncEventManager<TArgs> : IDisposable
     protected bool IsDisposed => Volatile.Read(ref _disposed) == 1;
 
     /// <summary>
-    /// Gets a collection of the current subscriptions to the asynchronous event.
+    /// Gets a collection of the current asynchronous event publishers subscribed to this event manager.
     /// </summary>
-    protected Collection Subscriptions => new(_subscriptions);
+    protected Collection Publishers => new(_subscriptions);
 
 #if NET9_0_OR_GREATER
     private readonly Lock _syncRoot = new();
