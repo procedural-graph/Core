@@ -10,24 +10,40 @@ namespace ProceduralGraph.Events;
 /// Represents a subscription to an asynchronous event.
 /// </summary>
 /// <inheritdoc cref="AsyncEventHandler{TArgs}"/>
-public sealed class AsyncEventSubscription<TArgs> : IDisposable, IAsyncDisposable
+public sealed class AsyncEventSubscription<TArgs> : IDisposable, IAsyncDisposable, IEquatable<AsyncEventSubscription<TArgs>>
 {
-    private readonly ChannelReader<TArgs> _reader;
-    private readonly AsyncEventHandler<TArgs> _handler;
     private readonly ILogger _logger;
     private CancellationTokenSource? _cts;
     private Task _invocationHandler;
     private volatile bool _disposed;
 
-    internal AsyncEventSubscription(ChannelReader<TArgs> reader, AsyncEventHandler<TArgs> handler, ILogger logger)
+    internal AsyncEventHandler<TArgs> Event;
+
+    internal AsyncEventPublisher<TArgs> Publisher { get; private set; }
+
+    internal AsyncEventSubscription(AsyncEventHandler<TArgs> handler, ILogger logger)
     {
         _invocationHandler = Task.CompletedTask;
-        _reader = reader;
-        _handler = handler;
         _logger = logger;
+        Event = handler;
     }
 
-    internal CancellationToken Start()
+    /// <inheritdoc/>
+    public bool Equals(AsyncEventSubscription<TArgs>? other)
+    {
+        return ReferenceEquals(Event, other?.Event);
+    }
+
+    /// <inheritdoc/>
+    public override bool Equals(object? obj)
+    {
+        return obj is AsyncEventSubscription<TArgs> other && Equals(other);
+    }
+
+    /// <inheritdoc/>
+    override public int GetHashCode() => Event.GetHashCode();
+
+    internal CancellationToken Start(Channel<TArgs> channel)
     {
         ThrowHelpers.ThrowIfDisposed(_disposed, this);
 
@@ -40,19 +56,21 @@ public sealed class AsyncEventSubscription<TArgs> : IDisposable, IAsyncDisposabl
         }
 
         CancellationToken cancellationToken = newCts.Token;
-        _invocationHandler = HandleInvocationsAsync(cancellationToken);
+        _invocationHandler = HandleInvocationsAsync(Event, channel.Reader, cancellationToken);
+
+        Publisher = new AsyncEventPublisher<TArgs>(this, channel.Writer);
 
         return cancellationToken;
     }
 
-    private async Task HandleInvocationsAsync(CancellationToken cancellationToken)
+    private async Task HandleInvocationsAsync(AsyncEventHandler<TArgs> handler, ChannelReader<TArgs> reader, CancellationToken cancellationToken)
     {
-        IAsyncEnumerable<TArgs> events = _reader.ReadAllAsync(cancellationToken);
+        IAsyncEnumerable<TArgs> events = reader.ReadAllAsync(cancellationToken);
         await foreach (TArgs args in events.ConfigureAwait(false))
         {
             try
             {
-                ValueTask process = _handler.Invoke(args, cancellationToken);
+                ValueTask process = handler.Invoke(args, cancellationToken);
                 await process.ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -103,4 +121,20 @@ public sealed class AsyncEventSubscription<TArgs> : IDisposable, IAsyncDisposabl
             _logger.LogException(ex);
         }
     }
+
+    /// <summary>
+    /// Compares two values to determine equality.
+    /// </summary>
+    /// <param name="left">The value to compare with <paramref name="right"/>.</param>
+    /// <param name="right">The value to compare with <paramref name="left"/>.</param>
+    /// <returns><see langword="true"/> if left is equal to right; otherwise, <see langword="false"/>.</returns>
+    public static bool operator ==(AsyncEventSubscription<TArgs>? left, AsyncEventSubscription<TArgs>? right) => Equals(left, right);
+
+    /// <summary>
+    /// Compares two values to determine inequality.
+    /// </summary>
+    /// <param name="left">The value to compare with <paramref name="right"/>.</param>
+    /// <param name="right">The value to compare with <paramref name="left"/>.</param>
+    /// <returns><see langword="true"/> if left is not equal to right; otherwise, <see langword="false"/>.</returns>
+    public static bool operator !=(AsyncEventSubscription<TArgs>? left, AsyncEventSubscription<TArgs>? right) => !Equals(left, right);
 }

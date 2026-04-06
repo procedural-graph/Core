@@ -33,14 +33,8 @@ public sealed class UnboundedAsyncEventManager<TArgs>(ILogger logger, UnboundedC
     /// <param name="args">The event data to pass to each event handler.</param>
     public void Publish(TArgs args)
     {
-        Span<AsyncEventPublisher<TArgs>?> publishers = Publishers;
-        for (int i = 0; i < publishers.Length; i++)
+        foreach (AsyncEventPublisher<TArgs> publisher in Subscriptions)
         {
-            if (Volatile.Read(ref publishers[i]) is not { } publisher)
-            {
-                continue;
-            }
-
             publisher.TryInvoke(args);
         }
     }

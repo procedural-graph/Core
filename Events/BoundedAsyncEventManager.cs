@@ -41,20 +41,14 @@ public sealed class BoundedAsyncEventManager<TArgs>(ILogger logger, BoundedChann
     /// <exception cref="OperationCanceledException">Thrown if the operation is canceled.</exception>
     public async ValueTask PublishAsync(TArgs args, CancellationToken cancellationToken = default)
     {
-        Span<AsyncEventPublisher<TArgs>?> publishers = Publishers;
-        Task[] tasks = ArrayPool<Task>.Shared.Rent(publishers.Length);
+        Collection items = Subscriptions;
+        Task[] tasks = ArrayPool<Task>.Shared.Rent(items.Count);
         try
         {
             int taskIndex = 0;
-
-            for (int publisherIndex = 0; publisherIndex < publishers.Length; publisherIndex++)
+            foreach (var item in items)
             {
-                if (Volatile.Read(ref publishers[publisherIndex]) is not { } publisher)
-                {
-                    continue;
-                }
-
-                ValueTask invokeTask = publisher.InvokeAsync(args, cancellationToken);
+                ValueTask invokeTask = item.InvokeAsync(args, cancellationToken);
 
                 if (!invokeTask.IsCompleted)
                 {
@@ -109,15 +103,9 @@ public sealed class BoundedAsyncEventManager<TArgs>(ILogger logger, BoundedChann
     /// <exception cref="InvalidOperationException">Thrown if any event handler cannot be completed synchronously.</exception>
     public void Publish(TArgs args)
     {
-        Span<AsyncEventPublisher<TArgs>?> publishers = Publishers;
-        for (int publisherIndex = 0; publisherIndex < publishers.Length; publisherIndex++)
+        foreach (AsyncEventPublisher<TArgs> subscription in Subscriptions)
         {
-            if (Volatile.Read(ref publishers[publisherIndex]) is not { } publisher)
-            {
-                continue;
-            }
-
-            ThrowHelpers.ThrowIf(!publisher.TryInvoke(args), "Event handler could not be completed synchronously.");
+            ThrowHelpers.ThrowIf(!subscription.TryInvoke(args), "Event handler could not be completed synchronously.");
         }
     }
 }
