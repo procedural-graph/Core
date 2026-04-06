@@ -7,6 +7,7 @@
   <Project Path="Benchmarks/Benchmarks.csproj" Id="3b26590f-2167-4450-830f-b4c821e30ce6" />
   <Project Path="Collections/Collections.csproj" />
   <Project Path="Core/Core.csproj" />
+  <Project Path="Events/Events.csproj" Id="d4582597-367f-4596-bde2-51ac38ea4b54" />
   <Project Path="Generic/Generic.csproj" />
   <Project Path="Mathematics/Mathematics.csproj" />
 </Solution>
