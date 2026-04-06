@@ -128,6 +128,7 @@ internal static class ThrowHelpers
 #endif
     }
 
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void ThrowIfNegative(int value, [CallerArgumentExpression(nameof(value))] string? paramName = null)
     {
 #if NET7_0_OR_GREATER
@@ -138,7 +139,19 @@ internal static class ThrowHelpers
             ThrowArgumentOutOfRangeException(paramName, value, NonNegativeIntegerMessage);
         }
 #endif
-    }  
+    }
+
+    [DoesNotReturn, MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowObjectDisposedException<T>(T? obj)
+    {
+        throw new ObjectDisposedException(obj?.GetType().FullName);
+    }
+
+    [DoesNotReturn, DebuggerStepThrough, MethodImpl(MethodImplOptions.NoInlining)]
+    public static void ThrowNotSupportedException<T>(T obj, [CallerMemberName] string? callerName = null) where T : notnull
+    {
+        throw new NotSupportedException($"The object of type {obj.GetType().FullName} does not support the operation in {callerName}.");
+    }
 
     [DoesNotReturn, MethodImpl(MethodImplOptions.NoInlining)]
     private static void ThrowInvalidOperationException(string? message)
@@ -157,12 +170,6 @@ internal static class ThrowHelpers
     private static void ThrowArgumentNullException(string? paramName)
     {
         throw new ArgumentNullException(paramName);
-    }
-
-    [DoesNotReturn, MethodImpl(MethodImplOptions.NoInlining)]
-    private static void ThrowObjectDisposedException(object? obj)
-    {
-        throw new ObjectDisposedException(obj?.GetType().FullName);
     }
 #endif
 }
