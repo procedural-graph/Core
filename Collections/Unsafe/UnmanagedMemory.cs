@@ -160,7 +160,7 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
     public void Clear()
     {
         using SafeHandle.Scope scope = Handle.GetScoped();
-        UnmanagedMarshal.Clear((T*)scope, Length);
+        UnmanagedMarshal.Clear((T*)(void*)scope, Length);
     }
 
     /// <inheritdoc/>
@@ -196,7 +196,6 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
     /// Creates a new <see cref="SafeHandle"/> instance by cloning the memory referenced by the specified handle for a given number of
     /// unmanaged elements.
     /// </summary>
-    /// <typeparam name="T">The unmanaged type of the elements to clone from the original handle.</typeparam>
     /// <param name="handle">
     /// The <see cref="SafeHandle"/> instance to clone. Must reference valid, allocated unmanaged 
     /// memory.
