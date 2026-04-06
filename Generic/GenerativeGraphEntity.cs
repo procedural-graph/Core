@@ -33,14 +33,8 @@ public abstract class GenerativeGraphEntity<TSceneMember>() : ComponentGraphEnti
     protected async ValueTask<bool> TryGenerateAsync(CancellationToken cancellationToken)
     {
         EntityState oldState = SetStateFlag(EntityState.Pending | EntityState.Busy);
-#if NET7_0_OR_GREATER
-        ObjectDisposedException.ThrowIf((oldState & EntityState.Dead) != 0, this);
-#else
-        if ((oldState & EntityState.Dead) != 0)
-        {
-            throw new ObjectDisposedException(GetType().FullName);
-        }
-#endif
+        ThrowHelpers.ThrowIfDisposed((oldState & EntityState.Dead) != 0, this);
+
         if ((oldState & EntityState.Busy) != 0)
         {
             return false;
