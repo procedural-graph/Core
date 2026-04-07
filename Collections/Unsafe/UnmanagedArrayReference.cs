@@ -35,8 +35,9 @@ public sealed class UnmanagedArrayReference<TValue> : UnmanagedArray<TValue> whe
     }
 
     /// <inheritdoc/>
-    protected override void Disposing()
+    protected override void OnDisposing()
     {
+        base.OnDisposing();
         Handle.DangerousRelease();
     }
 }

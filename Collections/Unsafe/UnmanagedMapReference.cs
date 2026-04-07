@@ -39,8 +39,9 @@ public sealed class UnmanagedMapReference<T> : UnmanagedMap<T> where T : unmanag
     }
 
     /// <inheritdoc/>
-    protected override void Disposing()
+    protected override void OnDisposing()
     {
+        base.OnDisposing();
         Handle.DangerousRelease();
     }
 }
