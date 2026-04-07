@@ -1,4 +1,5 @@
-﻿using ProceduralGraph.Mathematics;
+﻿using ProceduralGraph.Events;
+using ProceduralGraph.Mathematics;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
@@ -178,6 +179,13 @@ public readonly struct SceneMemberHandle<TSceneMember> : IDisposable, IEquatable
     {
         _manager = manager ?? throw new ArgumentNullException(nameof(manager));
         _sceneMember = manager.CreateChild(parent);
+    }
+
+    /// <inheritdoc cref="ISceneMemberManager{TSceneMember}.SubscribeTransformChanged(TSceneMember, AsyncEventHandler{Transform})"/>
+    public AsyncEventSubscription<Transform> SubscribeTransformChanged(AsyncEventHandler<Transform> handler)
+    {
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        return _manager.SubscribeTransformChanged(_sceneMember, handler);
     }
 
     /// <inheritdoc/>

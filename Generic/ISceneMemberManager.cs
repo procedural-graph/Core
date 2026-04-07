@@ -135,13 +135,6 @@ public interface ISceneMemberManager<TSceneMember> : IEqualityComparer<TSceneMem
     /// </summary>
     /// <param name="value">The scene member to monitor for transform changes.</param>
     /// <param name="handler">The asynchronous event handler to invoke when the transform changes.</param>
-    void SubscribeTransformChanged(TSceneMember value, AsyncEventHandler<Transform> handler);
-
-    /// <summary>
-    /// Unsubscribes the specified event handler from receiving transform change notifications for the given scene
-    /// member.
-    /// </summary>
-    /// <param name="value">The scene member for which to remove the transform changed event handler.</param>
-    /// <param name="handler">The event handler to unsubscribe from transform change notifications.</param>
-    void UnsubscribeTransformChanged(TSceneMember value, AsyncEventHandler<Transform> handler);
+    /// <inheritdoc cref="AsyncEventManager{TArgs}.Subscribe(AsyncEventHandler{TArgs})"/>
+    AsyncEventSubscription<Transform> SubscribeTransformChanged(TSceneMember value, AsyncEventHandler<Transform> handler);
 }
