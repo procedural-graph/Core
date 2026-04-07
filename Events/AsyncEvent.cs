@@ -2,6 +2,7 @@
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Channels;
+using System.Threading.Tasks;
 
 namespace ProceduralGraph.Events;
 
@@ -28,6 +29,13 @@ public abstract class AsyncEvent<TArgs>
     private readonly object _syncRoot = new();
 #endif
 
+    /// <inheritdoc cref="Subscribe(AsyncEventHandler{TArgs}, TaskScheduler)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public AsyncEventSubscription<TArgs> Subscribe(AsyncEventHandler<TArgs> handler)
+    {
+        return Subscribe(handler, TaskScheduler.Default);
+    }
+
     /// <summary>
     /// Adds the specified callback to the list of subscribers.
     /// </summary>
@@ -35,9 +43,9 @@ public abstract class AsyncEvent<TArgs>
     /// The callback to be added to the list of subscribers.
     /// Cannot be <see langword="null"/>.
     /// </param>
+    /// <param name="scheduler">The <see cref="TaskScheduler"/> on which the callback will be executed.</param>
     /// <returns>A subscription object that can be used to unsubscribe the callback.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public AsyncEventSubscription<TArgs> Subscribe(AsyncEventHandler<TArgs> handler)
+    public AsyncEventSubscription<TArgs> Subscribe(AsyncEventHandler<TArgs> handler, TaskScheduler scheduler)
     {
         ImmutableArray<AsyncEventListener<TArgs>> currentSubscriptions = listeners, oldSubscriptions;
         while (true)
@@ -63,7 +71,7 @@ public abstract class AsyncEvent<TArgs>
                 Channel<TArgs> channel = CreateChannel();
                 AsyncEventListener<TArgs> newSubscription = new(handler, channel, Logger);
 
-                CancellationToken cancellationToken = newSubscription.Start();
+                CancellationToken cancellationToken = newSubscription.Start(scheduler);
                 cancellationToken.Register(Unsubscribe, newSubscription);
 
                 listeners = currentSubscriptions.Add(newSubscription);

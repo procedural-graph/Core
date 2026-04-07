@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -42,7 +41,7 @@ public sealed class AsyncEventListener<TArgs> : Disposable, IAsyncDisposable, IE
     /// <inheritdoc/>
     override public int GetHashCode() => Event.GetHashCode();
 
-    internal CancellationToken Start()
+    internal CancellationToken Start(TaskScheduler scheduler)
     {
         ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
@@ -55,7 +54,9 @@ public sealed class AsyncEventListener<TArgs> : Disposable, IAsyncDisposable, IE
         }
 
         CancellationToken cancellationToken = newCts.Token;
-        _invocationHandler = HandleInvocationsAsync(Event, cancellationToken);
+
+        Task<Task> task = Task.Factory.StartNew(HandleInvocationsAsync, cancellationToken, TaskCreationOptions.DenyChildAttach, scheduler);
+        _invocationHandler = task.Unwrap();
 
         return cancellationToken;
     }
@@ -81,15 +82,14 @@ public sealed class AsyncEventListener<TArgs> : Disposable, IAsyncDisposable, IE
     /// <returns><see langword="true"/> if the operation was successfully invoked; otherwise, <see langword="false"/>.</returns>
     public bool TryInvoke(TArgs args) => _channel.Writer.TryWrite(args);
 
-    private async Task HandleInvocationsAsync(AsyncEventHandler<TArgs> handler, CancellationToken cancellationToken)
+    private async Task HandleInvocationsAsync()
     {
-        IAsyncEnumerable<TArgs> events = _channel.Reader.ReadAllAsync(cancellationToken);
-        await foreach (TArgs args in events.ConfigureAwait(false))
+        CancellationToken cancellationToken = _cts!.Token;
+        await foreach (TArgs args in _channel.Reader.ReadAllAsync(cancellationToken))
         {
             try
             {
-                ValueTask process = handler.Invoke(args, cancellationToken);
-                await process.ConfigureAwait(false);
+                await Event.Invoke(args, cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
