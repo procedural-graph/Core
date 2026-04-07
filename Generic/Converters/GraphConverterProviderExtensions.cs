@@ -17,19 +17,8 @@ public static class GraphConverterProviderExtensions
     /// <returns>A <see cref="GraphConverterProvider"/> instance containing all registered graph converters.</returns>
     public static GraphConverterProvider BuildConverterProvider(this ICollection<Type> types, IServiceProvider serviceProvider)
     {
-#if NET7_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(types);
-        ArgumentNullException.ThrowIfNull(serviceProvider);
-#else
-        if (types is null)
-        {
-            throw new ArgumentNullException(nameof(types));
-        }
-        if (serviceProvider is null)
-        {
-            throw new ArgumentNullException(nameof(serviceProvider));
-        }
-#endif
+        ThrowHelpers.ThrowIfNull(types, nameof(types));
+        ThrowHelpers.ThrowIfNull(serviceProvider, nameof(serviceProvider));
         GraphConverterProvider.Builder builder = GraphConverterProvider.CreateBuilder(serviceProvider, types);
         Span<Range> ranges = stackalloc Range[types.Count];
         int length = builder.CalculateConverterRangesAndLength(ranges);
