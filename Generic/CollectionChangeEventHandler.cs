@@ -14,7 +14,7 @@ internal sealed class CollectionChangeEventHandler<T> : IDisposable, IAsyncDispo
     private readonly Action<T> _onItemAdded;
     private readonly Action<T> _onItemRemoved;
 
-    public CollectionChangeEventHandler(AsyncEventManager<ItemEventArgs<T>> eventManager, Action<T> onItemAdded, Action<T> onItemRemoved)
+    public CollectionChangeEventHandler(AsyncEvent<ItemEventArgs<T>> eventManager, Action<T> onItemAdded, Action<T> onItemRemoved)
     {
         ThrowHelpers.ThrowIfNull(eventManager);
         _subscription = eventManager.Subscribe(OnCollectionChangedAsync);

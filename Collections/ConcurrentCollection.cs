@@ -13,13 +13,13 @@ namespace ProceduralGraph.Collections;
 /// </summary>
 /// <typeparam name="TItem">The type of elements contained in the collection.</typeparam>
 /// <typeparam name="TEnumerator">The type of enumerator used to iterate through the collection.</typeparam>
-public abstract class ConcurrentCollection<TItem, TEnumerator> : AsyncEventManager<ItemEventArgs<TItem>>, ICollection<TItem> where TEnumerator : IEnumerator<TItem>
+/// <remarks>
+/// Initializes a new instance of the <see cref="ConcurrentCollection{TItem, TEnumerator}"/> class.
+/// </remarks>
+/// <returns/>
+/// <inheritdoc cref="AsyncEventPublisher.Create{TArgs}(UnboundedChannelOptions, ILogger)"/>
+public abstract class ConcurrentCollection<TItem, TEnumerator>(ILogger logger) : Disposable, ICollection<TItem> where TEnumerator : IEnumerator<TItem>
 {
-    /// <summary>
-    /// Represents the error message indicating that a modification attempt was made on a completed collection.
-    /// </summary>
-    protected const string ModificationAfterCompletionError = "Cannot modify a completed collection.";
-
     private static readonly UnboundedChannelOptions _channelOptions = new()
     {
         SingleReader = true,
@@ -28,6 +28,13 @@ public abstract class ConcurrentCollection<TItem, TEnumerator> : AsyncEventManag
 
     /// <inheritdoc/>
     public abstract int Count { get; }
+
+    private readonly AsyncEventPublisher<ItemEventArgs<TItem>> _collectionChanged = AsyncEventPublisher.Create<ItemEventArgs<TItem>>(_channelOptions, logger);
+    /// <summary>
+    /// Gets an asynchronous event that subscribers can listen to for notifications when items
+    /// are added or removed from the collection.
+    /// </summary>
+    public AsyncEvent<ItemEventArgs<TItem>> CollectionChanged => _collectionChanged.Event;
 
     bool ICollection<TItem>.IsReadOnly => true;
 
@@ -42,14 +49,8 @@ public abstract class ConcurrentCollection<TItem, TEnumerator> : AsyncEventManag
     protected void RaiseCollectionChanged(TItem item, ItemChangeType changeType)
     {
         ItemEventArgs<TItem> args = new(item, changeType);
-        foreach (AsyncEventPublisher<ItemEventArgs<TItem>> publisher in Publishers)
-        {
-            publisher.TryInvoke(args);
-        }
+        _collectionChanged.Publish(args);
     }
-
-    /// <inheritdoc/>
-    protected override Channel<ItemEventArgs<TItem>> CreateChannel() => Channel.CreateUnbounded<ItemEventArgs<TItem>>(_channelOptions);
 
     /// <inheritdoc/>
     public abstract bool Contains(TItem item);

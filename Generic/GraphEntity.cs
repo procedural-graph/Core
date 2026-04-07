@@ -98,7 +98,7 @@ public abstract class GraphEntity<TSceneMember> : LifecycleGraphNode<TSceneMembe
         CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, parentStoppingToken);
 
         _children = new ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>(GetSceneMember, Graph.Logger);
-        _childEventHandler = new CollectionChangeEventHandler<GraphEntity<TSceneMember>>(_children, OnChildAdded, OnChildRemoved);
+        _childEventHandler = new CollectionChangeEventHandler<GraphEntity<TSceneMember>>(_children.CollectionChanged, OnChildAdded, OnChildRemoved);
 
         return cts;
     }

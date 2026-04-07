@@ -15,8 +15,14 @@ namespace ProceduralGraph.Collections;
 /// </summary>
 /// <typeparam name="TKey">The type of the key used to group items. Must be non-nullable.</typeparam>
 /// <typeparam name="TItem">The type of items stored in the collection.</typeparam>
-public sealed class ConcurrentGroupedCollection<TKey, TItem> : 
-    ConcurrentCollection<TItem, ConcurrentGroupedCollection<TKey, TItem>.Enumerator>,
+/// <remarks>
+/// Initializes a new instance of the <see cref="ConcurrentGroupedCollection{TKey, TItem}"/> class using the specified key selector
+/// function.
+/// </remarks>
+/// <param name="keySelector">A function that extracts the grouping key from each item. Cannot be <see langword="null"/>.</param>
+/// <param name="logger">The logger instance used to record diagnostic and operational messages. Cannot be <see langword="null"/>.</param>
+public sealed class ConcurrentGroupedCollection<TKey, TItem>(Func<TItem, TKey?> keySelector, ILogger logger) : 
+    ConcurrentCollection<TItem, ConcurrentGroupedCollection<TKey, TItem>.Enumerator>(logger),
     IReadOnlyDictionary<object, ImmutableHashSet<TItem>>,
     ICollection<TItem> 
     where TKey : class
@@ -24,7 +30,7 @@ public sealed class ConcurrentGroupedCollection<TKey, TItem> :
     /// <summary>
     /// Enumerates the elements contained within a collection of immutable hash sets.
     /// </summary>
-    public new struct Enumerator : IEnumerator<TItem>
+    public struct Enumerator : IEnumerator<TItem>
     {
         private readonly IEnumerator<ImmutableHashSet<TItem>> _setEnumerator;
         private ImmutableHashSet<TItem>.Enumerator _itemEnumerator;
@@ -79,15 +85,12 @@ public sealed class ConcurrentGroupedCollection<TKey, TItem> :
         }
     }
 
-    private readonly Func<TItem, TKey?> _keySelector;
-    private readonly ConcurrentDictionary<object, ImmutableHashSet<TItem>> _items;
+    private readonly Func<TItem, TKey?> _keySelector = keySelector ?? throw new ArgumentNullException(nameof(keySelector));
+    private readonly ConcurrentDictionary<object, ImmutableHashSet<TItem>> _items = new ConcurrentDictionary<object, ImmutableHashSet<TItem>>();
 
     private int _count;
     /// <inheritdoc/>
     public override int Count => _count;
-
-    /// <inheritdoc/>
-    protected override ILogger Logger { get; }
 
     /// <inheritdoc/>
     public IEnumerable<TKey> Keys => _items.Keys.OfType<TKey>();
@@ -103,19 +106,6 @@ public sealed class ConcurrentGroupedCollection<TKey, TItem> :
     public ImmutableHashSet<TItem> this[TKey? key] => _items[key ?? _defaultKey];
 
     private readonly static object _defaultKey = new();
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ConcurrentGroupedCollection{TKey, TItem}"/> class using the specified key selector
-    /// function.
-    /// </summary>
-    /// <param name="keySelector">A function that extracts the grouping key from each item. Cannot be <see langword="null"/>.</param>
-    /// <param name="logger">The logger instance used to record diagnostic and operational messages. Cannot be <see langword="null"/>.</param>
-    public ConcurrentGroupedCollection(Func<TItem, TKey?> keySelector, ILogger logger)
-    {
-        _keySelector = keySelector ?? throw new ArgumentNullException(nameof(keySelector));
-        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _items = new ConcurrentDictionary<object, ImmutableHashSet<TItem>>();
-    }
 
     /// <summary>
     /// Attempts to add the specified item to the collection.

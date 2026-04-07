@@ -20,9 +20,6 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
 
     bool ICollection<T>.IsReadOnly => false;
 
-    /// <inheritdoc/>
-    protected override ILogger Logger { get; }
-
     /// <summary>
     /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class.
     /// </summary>
@@ -33,41 +30,35 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// This parameter cannot be <see langword="null"/>.
     /// </param>
     /// <param name="logger">The logger instance used to record diagnostic and operational messages. Cannot be <see langword="null"/>.</param>
-    public ConcurrentList(IEnumerable<T> collection, IEqualityComparer<T> comparer, ILogger logger)
+    public ConcurrentList(IEnumerable<T> collection, IEqualityComparer<T> comparer, ILogger logger) : base(logger)
     {
         ThrowHelpers.ThrowIfNull(collection);
         _items = [.. collection];
 
         ThrowHelpers.ThrowIfNull(comparer);
-        _comparer = comparer;
-
-        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _comparer = comparer ?? throw new ArgumentNullException(nameof(comparer));
     }
 
     /// <inheritdoc cref="ConcurrentList{T}.ConcurrentList(IEnumerable{T}, IEqualityComparer{T}, ILogger)"/>
-    public ConcurrentList(IEnumerable<T> collection, ILogger logger)
+    public ConcurrentList(IEnumerable<T> collection, ILogger logger) : base(logger)
     {
         ThrowHelpers.ThrowIfNull(collection);
         _items = [.. collection];
-
-        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _comparer = EqualityComparer<T>.Default;
     }
 
     /// <inheritdoc cref="ConcurrentList{T}.ConcurrentList(IEnumerable{T}, IEqualityComparer{T}, ILogger)"/>
-    public ConcurrentList(IEqualityComparer<T> comparer, ILogger logger)
+    public ConcurrentList(IEqualityComparer<T> comparer, ILogger logger) : base(logger)
     {
-        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         ThrowHelpers.ThrowIfNull(comparer);
         _comparer = comparer;
         _items = [];
     }
 
     /// <inheritdoc cref="ConcurrentList{T}.ConcurrentList(IEnumerable{T}, IEqualityComparer{T}, ILogger)"/>
-    public ConcurrentList(ILogger logger)
+    public ConcurrentList(ILogger logger) : base(logger)
     {
-        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _comparer = EqualityComparer<T>.Default;
         _items = [];
     }

@@ -179,7 +179,7 @@ public abstract class ComponentGraphEntity<TSceneMember> : GraphEntity<TSceneMem
     {
         CancellationTokenSource cts = base.BuildCancellationTokenSource(stoppingToken);
         _components = new ConcurrentList<GraphComponent<TSceneMember>>(Graph.Logger);
-        _componentEventHandler = new CollectionChangeEventHandler<GraphComponent<TSceneMember>>(_components, OnComponentAdded, OnComponentRemoved);
+        _componentEventHandler = new CollectionChangeEventHandler<GraphComponent<TSceneMember>>(_components.CollectionChanged, OnComponentAdded, OnComponentRemoved);
         return cts;
     }
 

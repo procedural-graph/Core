@@ -1,135 +1,25 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Channels;
 using System.Threading.Tasks;
 
 namespace ProceduralGraph.Events;
 
 /// <summary>
-/// Represents a subscription to an asynchronous event.
+/// Represents a subscription to an asynchronous event with arguments of type <typeparamref name="TArgs"/>. 
+/// Provides a handle for managing the subscription's lifecycle, including disposal to unsubscribe from the event.
 /// </summary>
-/// <inheritdoc cref="AsyncEventHandler{TArgs}"/>
-public sealed class AsyncEventSubscription<TArgs> : IDisposable, IAsyncDisposable, IEquatable<AsyncEventSubscription<TArgs>>
+/// <inheritdoc cref="AsyncEvent{TArgs}"/>
+public readonly struct AsyncEventSubscription<TArgs> : IDisposable, IAsyncDisposable
 {
-    private readonly ILogger _logger;
-    private CancellationTokenSource? _cts;
-    private Task _invocationHandler;
-    private int _disposed;
+    private readonly AsyncEventListener<TArgs> _listener;
 
-    internal AsyncEventHandler<TArgs> Event;
-
-    internal AsyncEventPublisher<TArgs> Publisher { get; private set; }
-
-    internal AsyncEventSubscription(AsyncEventHandler<TArgs> handler, ILogger logger)
+    internal AsyncEventSubscription(AsyncEventListener<TArgs> listener)
     {
-        _invocationHandler = Task.CompletedTask;
-        _logger = logger;
-        Event = handler;
+        _listener = listener;
     }
 
     /// <inheritdoc/>
-    public bool Equals(AsyncEventSubscription<TArgs>? other)
-    {
-        return ReferenceEquals(Event, other?.Event);
-    }
+    public void Dispose() => _listener.Dispose();
 
     /// <inheritdoc/>
-    public override bool Equals(object? obj)
-    {
-        return obj is AsyncEventSubscription<TArgs> other && Equals(other);
-    }
-
-    /// <inheritdoc/>
-    override public int GetHashCode() => Event.GetHashCode();
-
-    internal CancellationToken Start(Channel<TArgs> channel)
-    {
-        ThrowHelpers.ThrowIfDisposed(Volatile.Read(ref _disposed) == 1, this);
-
-        CancellationTokenSource? newCts = new(), oldCts = Interlocked.CompareExchange(ref _cts, newCts, null);
-
-        if (oldCts is { })
-        {
-            newCts.Dispose();
-            throw new InvalidOperationException("Subscription has already been started.");
-        }
-
-        CancellationToken cancellationToken = newCts.Token;
-        _invocationHandler = HandleInvocationsAsync(Event, channel.Reader, cancellationToken);
-
-        Publisher = new AsyncEventPublisher<TArgs>(this, channel.Writer);
-
-        return cancellationToken;
-    }
-
-    private async Task HandleInvocationsAsync(AsyncEventHandler<TArgs> handler, ChannelReader<TArgs> reader, CancellationToken cancellationToken)
-    {
-        IAsyncEnumerable<TArgs> events = reader.ReadAllAsync(cancellationToken);
-        await foreach (TArgs args in events.ConfigureAwait(false))
-        {
-            try
-            {
-                ValueTask process = handler.Invoke(args, cancellationToken);
-                await process.ConfigureAwait(false);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogException(ex);
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) == 1 || _cts is null)
-        {
-            return;
-        }
-
-        try
-        {
-            _cts.Cancel();
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogException(ex);
-        }
-        finally
-        {
-            _cts.Dispose();
-        }
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
-    {
-        Dispose();
-
-        try
-        {
-            await _invocationHandler.ConfigureAwait(false);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            _logger.LogException(ex);
-        }
-    }
-
-    /// <summary>
-    /// Compares two values to determine equality.
-    /// </summary>
-    /// <param name="left">The value to compare with <paramref name="right"/>.</param>
-    /// <param name="right">The value to compare with <paramref name="left"/>.</param>
-    /// <returns><see langword="true"/> if left is equal to right; otherwise, <see langword="false"/>.</returns>
-    public static bool operator ==(AsyncEventSubscription<TArgs>? left, AsyncEventSubscription<TArgs>? right) => Equals(left, right);
-
-    /// <summary>
-    /// Compares two values to determine inequality.
-    /// </summary>
-    /// <param name="left">The value to compare with <paramref name="right"/>.</param>
-    /// <param name="right">The value to compare with <paramref name="left"/>.</param>
-    /// <returns><see langword="true"/> if left is not equal to right; otherwise, <see langword="false"/>.</returns>
-    public static bool operator !=(AsyncEventSubscription<TArgs>? left, AsyncEventSubscription<TArgs>? right) => !Equals(left, right);
+    public ValueTask DisposeAsync() => _listener.DisposeAsync();
 }
