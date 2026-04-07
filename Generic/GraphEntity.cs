@@ -1,4 +1,5 @@
 ﻿using ProceduralGraph.Collections;
+using ProceduralGraph.Events;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
@@ -71,9 +72,9 @@ public abstract class GraphEntity<TSceneMember> : LifecycleGraphNode<TSceneMembe
     private ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>? _children;
     /// <inheritdoc cref="IGraphNode.Descendants"/>
     public ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>> Children => _children!;
-    ICollection<IGraphNode> IGraphNode.Descendants => (ICollection<IGraphNode>)_children!;
+    ICollection<IGraphNode> IGraphNode.Descendants => (ICollection<IGraphNode>)(ICollection<GraphEntity<TSceneMember>>)_children!;
 
-    private Task _childEventHandling = Task.CompletedTask;
+    CollectionChangeEventHandler<GraphEntity<TSceneMember>>? _childEventHandler;
 
     /// <summary>
     /// Occurs when the state of the entity has changed.
@@ -96,8 +97,8 @@ public abstract class GraphEntity<TSceneMember> : LifecycleGraphNode<TSceneMembe
         CancellationToken parentStoppingToken = Parent?.StoppingToken ?? CancellationToken.None;
         CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, parentStoppingToken);
 
-        _children = new ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>(GetSceneMember);
-        _childEventHandling = HandleCollectionEventsAsync(_children, OnChildAdded, OnChildRemoved, Graph.Logger, cts.Token);
+        _children = new ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>(GetSceneMember, Graph.Logger);
+        _childEventHandler = new CollectionChangeEventHandler<GraphEntity<TSceneMember>>(_children, OnChildAdded, OnChildRemoved);
 
         return cts;
     }
@@ -106,12 +107,14 @@ public abstract class GraphEntity<TSceneMember> : LifecycleGraphNode<TSceneMembe
     protected override async ValueTask OnStoppingAsync(CancellationToken stoppingToken)
     {
         ValueTask baseMethod = base.OnStoppingAsync(stoppingToken);
-        await baseMethod.ConfigureAwait(false);
-        if (_childEventHandling.Status != TaskStatus.RanToCompletion)
+
+        if (_childEventHandler is { })
         {
-            Task wait = _childEventHandling.WaitAsync(stoppingToken);
-            await wait.ConfigureAwait(false);
-        } 
+            ValueTask unsubscribe = _childEventHandler.DisposeAsync();
+            await unsubscribe.ConfigureAwait(false);
+        }
+
+        await baseMethod.ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -178,35 +181,6 @@ public abstract class GraphEntity<TSceneMember> : LifecycleGraphNode<TSceneMembe
         return $"{GetType().Name} ({ID})";
     }
 
-    internal static async Task HandleCollectionEventsAsync<TItem, TEnumerator>(
-        ConcurrentCollection<TItem, TEnumerator> collection,
-        Action<TItem> onAdded,
-        Action<TItem> onRemoved,
-        ILogger logger,
-        CancellationToken cancellationToken)
-        where TEnumerator : IEnumerator<TItem>
-    {
-        ChannelReader<ItemEventArgs<TItem>> reader = collection.Events;
-        await foreach (ItemEventArgs<TItem> args in reader.ReadAllAsync(cancellationToken))
-        {
-            try
-            {
-                Action<TItem> callback = args.ChangeType switch
-                {
-                    ItemChangeType.Added => onAdded,
-                    ItemChangeType.Removed => onRemoved,
-                    _ => throw new InvalidOperationException("Unknown change type.")
-                };
-
-                callback(args.Item);
-            }
-            catch (Exception ex)
-            {
-                logger.LogException(ex, args.Item);
-            }
-        }
-    }
-
     internal static TSceneMember? GetSceneMember(GraphEntity<TSceneMember> entity)
     {
         return entity.GetSceneMember();
@@ -222,24 +196,24 @@ public abstract class GraphEntity<TSceneMember> : LifecycleGraphNode<TSceneMembe
             return;
         }
 
-        using ConcurrentGroupedCollection<TSceneMember, GraphEntity<TSceneMember>>.Enumerator enumerator = _children.GetEnumerator();
-        while (enumerator.MoveNext())
+        foreach (GraphEntity<TSceneMember> child in _children)
         {
-            GraphEntity<TSceneMember> current = enumerator.Current;
-            Task currentLifetime = current.Lifetime;
+            Task currentLifetime = child.Lifetime;
 
             if (currentLifetime.IsCompleted)
             {
                 if (currentLifetime.IsFaulted)
                 {
-                    Graph.Logger.LogException(currentLifetime.Exception!, current);
+                    Graph.Logger.LogException(currentLifetime.Exception!, child);
                 }
 
-                current.Dispose();
+                child.Dispose();
             }
 
-            _ = currentLifetime.ContinueWith(current.Dispose, TaskContinuationOptions.RunContinuationsAsynchronously);
+            _ = currentLifetime.ContinueWith(child.Dispose, TaskContinuationOptions.RunContinuationsAsynchronously);
         }
+
+        _children.Dispose();
     }
 
     private void Dispose(Task lifetime)

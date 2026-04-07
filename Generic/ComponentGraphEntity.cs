@@ -117,7 +117,7 @@ public abstract class ComponentGraphEntity<TSceneMember> : GraphEntity<TSceneMem
             ICollection<IGraphNode> components = ((ICollection<IGraphNode>)_owner.Components);
             components.CopyTo(array, arrayIndex);
             arrayIndex += components.Count;
-            ((ICollection<IGraphNode>)_owner.Children).CopyTo(array, arrayIndex);
+            ((ICollection<IGraphNode>)(ICollection<GraphEntity<TSceneMember>>)_owner.Children).CopyTo(array, arrayIndex);
         }
 
         /// <inheritdoc/>
@@ -164,7 +164,7 @@ public abstract class ComponentGraphEntity<TSceneMember> : GraphEntity<TSceneMem
     /// </summary>
     public ConcurrentList<GraphComponent<TSceneMember>> Components => _components!;
 
-    private Task _componentEventHandler = Task.CompletedTask;
+    private CollectionChangeEventHandler<GraphComponent<TSceneMember>>? _componentEventHandler;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ComponentGraphEntity{TSceneMember}"/> class.
@@ -178,8 +178,8 @@ public abstract class ComponentGraphEntity<TSceneMember> : GraphEntity<TSceneMem
     protected override CancellationTokenSource BuildCancellationTokenSource(CancellationToken stoppingToken)
     {
         CancellationTokenSource cts = base.BuildCancellationTokenSource(stoppingToken);
-        _components = [];
-        _componentEventHandler = HandleCollectionEventsAsync(_components, OnComponentAdded, OnComponentRemoved, Graph.Logger, cts.Token);
+        _components = new ConcurrentList<GraphComponent<TSceneMember>>(Graph.Logger);
+        _componentEventHandler = new CollectionChangeEventHandler<GraphComponent<TSceneMember>>(_components, OnComponentAdded, OnComponentRemoved);
         return cts;
     }
 
@@ -207,13 +207,12 @@ public abstract class ComponentGraphEntity<TSceneMember> : GraphEntity<TSceneMem
     protected override async ValueTask OnStoppingAsync(CancellationToken cancellationToken)
     {
         ValueTask baseMethod = base.OnStoppingAsync(cancellationToken);
-        await baseMethod.ConfigureAwait(false);
-
-        if (_componentEventHandler.Status != TaskStatus.RanToCompletion)
+        if (_componentEventHandler is { })
         {
-            Task eventHandlers = _componentEventHandler.WaitAsync(cancellationToken);
-            await eventHandlers.ConfigureAwait(false);
+            ValueTask unsubscribe = _componentEventHandler.DisposeAsync();
+            await unsubscribe.ConfigureAwait(false);
         }
+        await baseMethod.ConfigureAwait(false);
     }
 
     /// <inheritdoc/>
@@ -226,10 +225,15 @@ public abstract class ComponentGraphEntity<TSceneMember> : GraphEntity<TSceneMem
                 return;
             }
 
-            foreach (IDisposable disposable in _components.OfType<IDisposable>())
+            foreach (GraphComponent<TSceneMember> component in _components)
             {
-                disposable.Dispose();
+                if (component is IDisposable disposableComponent)
+                {
+                    disposableComponent.Dispose();
+                }
             }
+
+            _components.Dispose();
         }
         finally
         {

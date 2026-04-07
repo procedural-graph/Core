@@ -15,7 +15,7 @@ namespace ProceduralGraph.Events;
 public abstract class AsyncEventManager<TArgs> : IDisposable
 {
     /// <inheritdoc cref="IEnumerator{T}"/>
-    public ref struct Enumerator
+    protected ref struct Enumerator
     {
         private readonly ImmutableArray<AsyncEventSubscription<TArgs>> _subscriptions;
         private int _index;
@@ -50,7 +50,7 @@ public abstract class AsyncEventManager<TArgs> : IDisposable
     /// <summary>
     /// Represents a read-only collection of asynchronous event publishers.
     /// </summary>
-    public readonly ref struct Collection : IReadOnlyCollection<AsyncEventPublisher<TArgs>>
+    protected readonly ref struct Collection : IReadOnlyCollection<AsyncEventPublisher<TArgs>>
     {
         private readonly ImmutableArray<AsyncEventSubscription<TArgs>> _subscriptions;
 

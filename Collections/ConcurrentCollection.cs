@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Threading.Channels;
 using System.Runtime.CompilerServices;
+using ProceduralGraph.Events;
 
 namespace ProceduralGraph.Collections;
 
@@ -12,7 +13,7 @@ namespace ProceduralGraph.Collections;
 /// </summary>
 /// <typeparam name="TItem">The type of elements contained in the collection.</typeparam>
 /// <typeparam name="TEnumerator">The type of enumerator used to iterate through the collection.</typeparam>
-public abstract partial class ConcurrentCollection<TItem, TEnumerator> : ICollection<TItem> where TEnumerator : IEnumerator<TItem>
+public abstract class ConcurrentCollection<TItem, TEnumerator> : AsyncEventManager<ItemEventArgs<TItem>>, ICollection<TItem> where TEnumerator : IEnumerator<TItem>
 {
     /// <summary>
     /// Represents the error message indicating that a modification attempt was made on a completed collection.
@@ -25,34 +26,10 @@ public abstract partial class ConcurrentCollection<TItem, TEnumerator> : ICollec
         SingleWriter = false
     };
 
-    private readonly Channel<ItemEventArgs<TItem>> _events = Channel.CreateUnbounded<ItemEventArgs<TItem>>(_channelOptions);
-
-    /// <summary>
-    /// Gets a channel reader that can be used to subscribe to collection change events.
-    /// </summary>
-    public ChannelReader<ItemEventArgs<TItem>> Events => _events.Reader;
-
     /// <inheritdoc/>
     public abstract int Count { get; }
 
     bool ICollection<TItem>.IsReadOnly => true;
-
-    private volatile bool _completed;
-    /// <summary>
-    /// Gets a value indicating whether the collection has been marked as complete, meaning that it can no longer be modified.
-    /// </summary>
-    protected bool IsCompleted => _completed;
-
-    /// <summary>
-    /// Marks the event stream as complete, preventing any further events from being written.
-    /// </summary>
-    public void Complete()
-    {
-        if (_events.Writer.TryComplete())
-        {
-            _completed = true;
-        }
-    }
 
     /// <summary>
     /// Notifies subscribers that the collection has changed by raising a collection changed event for the specified
@@ -64,8 +41,15 @@ public abstract partial class ConcurrentCollection<TItem, TEnumerator> : ICollec
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     protected void RaiseCollectionChanged(TItem item, ItemChangeType changeType)
     {
-        _events.Writer.TryWrite(new ItemEventArgs<TItem>(item, changeType));
+        ItemEventArgs<TItem> args = new(item, changeType);
+        foreach (AsyncEventPublisher<ItemEventArgs<TItem>> publisher in Publishers)
+        {
+            publisher.TryInvoke(args);
+        }
     }
+
+    /// <inheritdoc/>
+    protected override Channel<ItemEventArgs<TItem>> CreateChannel() => Channel.CreateUnbounded<ItemEventArgs<TItem>>(_channelOptions);
 
     /// <inheritdoc/>
     public abstract bool Contains(TItem item);

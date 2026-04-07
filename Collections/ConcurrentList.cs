@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Threading;
 
@@ -19,9 +20,11 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
 
     bool ICollection<T>.IsReadOnly => false;
 
+    /// <inheritdoc/>
+    protected override ILogger Logger { get; }
+
     /// <summary>
-    /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class that contains elements copied from the specified
-    /// collection and uses the specified equality comparer for item comparisons.
+    /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class.
     /// </summary>
     /// <param name="collection">The collection whose elements are copied to the new list. 
     /// This parameter cannot be <see langword="null"/>.
@@ -29,59 +32,54 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <param name="comparer">The equality comparer to use for comparing items in the list. 
     /// This parameter cannot be <see langword="null"/>.
     /// </param>
-    public ConcurrentList(IEnumerable<T> collection, IEqualityComparer<T> comparer)
+    /// <param name="logger">The logger instance used to record diagnostic and operational messages. Cannot be <see langword="null"/>.</param>
+    public ConcurrentList(IEnumerable<T> collection, IEqualityComparer<T> comparer, ILogger logger)
     {
         ThrowHelpers.ThrowIfNull(collection);
         _items = [.. collection];
 
         ThrowHelpers.ThrowIfNull(comparer);
         _comparer = comparer;
+
+        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class that contains elements copied from the specified
-    /// collection.
-    /// </summary>
-    /// <param name="collection">The collection whose elements are copied to the new list. 
-    /// This parameter cannot be <see langword="null"/>.
-    /// </param>
-    public ConcurrentList(IEnumerable<T> collection)
+    /// <inheritdoc cref="ConcurrentList{T}.ConcurrentList(IEnumerable{T}, IEqualityComparer{T}, ILogger)"/>
+    public ConcurrentList(IEnumerable<T> collection, ILogger logger)
     {
         ThrowHelpers.ThrowIfNull(collection);
-        _comparer = EqualityComparer<T>.Default;
         _items = [.. collection];
+
+        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
+
+        _comparer = EqualityComparer<T>.Default;
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ConcurrentList{T}"/> class using the specified equality comparer.
-    /// </summary>
-    /// <param name="comparer">The equality comparer to use for comparing items in the list. 
-    /// This parameter cannot be <see langword="null"/>.
-    /// </param>
-    public ConcurrentList(IEqualityComparer<T> comparer)
+    /// <inheritdoc cref="ConcurrentList{T}.ConcurrentList(IEnumerable{T}, IEqualityComparer{T}, ILogger)"/>
+    public ConcurrentList(IEqualityComparer<T> comparer, ILogger logger)
     {
+        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         ThrowHelpers.ThrowIfNull(comparer);
         _comparer = comparer;
         _items = [];
     }
 
-    /// <summary>
-    /// Initializes a new empty instance of the <see cref="ConcurrentList{T}"/> class using the default equality 
-    /// comparer of <typeparamref name="T"/>.
-    /// </summary>
-    public ConcurrentList()
+    /// <inheritdoc cref="ConcurrentList{T}.ConcurrentList(IEnumerable{T}, IEqualityComparer{T}, ILogger)"/>
+    public ConcurrentList(ILogger logger)
     {
+        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _comparer = EqualityComparer<T>.Default;
         _items = [];
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public T this[int index]
     {
         get => _items[index];
         set
         {
-            ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+            ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
             T oldItem;
 
             ImmutableList<T>? oldList, currentList = _items;
@@ -105,10 +103,11 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public void Add(T item)
     {
         ThrowHelpers.ThrowIfNull(item);
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
 
         if (ImmutableInterlocked.Update(ref _items, static (l, i) => l.Add(i), item))
         {
@@ -117,10 +116,11 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public bool Remove(T item)
     {
         ThrowHelpers.ThrowIfNull(item);
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
 
         if (ImmutableInterlocked.Update(ref _items, static (l, i) => l.Remove(i), item))
         {
@@ -132,9 +132,10 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public void RemoveAt(int index)
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         ImmutableList<T>? oldList, currentList = _items;
         do
         {
@@ -149,21 +150,26 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public override bool Contains(T item)
     {
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         return _items.Contains(item);
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public int IndexOf(T item)
     {
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         return _items.IndexOf(item);
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public void Clear()
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         ImmutableList<T> oldList = Interlocked.Exchange(ref _items, []);
         foreach (T item in oldList)
         {
@@ -172,18 +178,21 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public override int CopyTo(T[] array, int arrayIndex)
     {
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         ImmutableList<T> items = _items;
         items.CopyTo(array, arrayIndex);
         return items.Count;
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public void Insert(int index, T item)
     {
         ThrowHelpers.ThrowIfNull(item);
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         if (ImmutableInterlocked.Update(ref _items, Insert, new KeyValuePair<int, T>(index, item)))
         {
             RaiseCollectionChanged(item, ItemChangeType.Added);
@@ -197,6 +206,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public override ImmutableList<T>.Enumerator GetEnumerator()
     {
         return _items.GetEnumerator();

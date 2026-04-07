@@ -15,7 +15,7 @@ namespace ProceduralGraph.Collections;
 /// </summary>
 /// <typeparam name="TKey">The type of the key used to group items. Must be non-nullable.</typeparam>
 /// <typeparam name="TItem">The type of items stored in the collection.</typeparam>
-public partial class ConcurrentGroupedCollection<TKey, TItem> : 
+public sealed class ConcurrentGroupedCollection<TKey, TItem> : 
     ConcurrentCollection<TItem, ConcurrentGroupedCollection<TKey, TItem>.Enumerator>,
     IReadOnlyDictionary<object, ImmutableHashSet<TItem>>,
     ICollection<TItem> 
@@ -24,7 +24,7 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// <summary>
     /// Enumerates the elements contained within a collection of immutable hash sets.
     /// </summary>
-    public struct Enumerator : IEnumerator<TItem>
+    public new struct Enumerator : IEnumerator<TItem>
     {
         private readonly IEnumerator<ImmutableHashSet<TItem>> _setEnumerator;
         private ImmutableHashSet<TItem>.Enumerator _itemEnumerator;
@@ -87,6 +87,9 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     public override int Count => _count;
 
     /// <inheritdoc/>
+    protected override ILogger Logger { get; }
+
+    /// <inheritdoc/>
     public IEnumerable<TKey> Keys => _items.Keys.OfType<TKey>();
     IEnumerable<object> IReadOnlyDictionary<object, ImmutableHashSet<TItem>>.Keys => _items.Keys;
 
@@ -94,7 +97,7 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
 
     bool ICollection<TItem>.IsReadOnly => false;
 
-    ImmutableHashSet<TItem> IReadOnlyDictionary<object, ImmutableHashSet<TItem>>.this[object key] => throw new NotImplementedException();
+    ImmutableHashSet<TItem> IReadOnlyDictionary<object, ImmutableHashSet<TItem>>.this[object key] => _items[key];
 
     /// <inheritdoc/>
     public ImmutableHashSet<TItem> this[TKey? key] => _items[key ?? _defaultKey];
@@ -106,11 +109,12 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// function.
     /// </summary>
     /// <param name="keySelector">A function that extracts the grouping key from each item. Cannot be <see langword="null"/>.</param>
-    public ConcurrentGroupedCollection(Func<TItem, TKey?> keySelector)
+    /// <param name="logger">The logger instance used to record diagnostic and operational messages. Cannot be <see langword="null"/>.</param>
+    public ConcurrentGroupedCollection(Func<TItem, TKey?> keySelector, ILogger logger)
     {
-        ThrowHelpers.ThrowIfNull(keySelector);
+        _keySelector = keySelector ?? throw new ArgumentNullException(nameof(keySelector));
+        Logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _items = new ConcurrentDictionary<object, ImmutableHashSet<TItem>>();
-        _keySelector = keySelector;
     }
 
     /// <summary>
@@ -118,18 +122,29 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// </summary>
     /// <param name="item">The item to add to the collection. Cannot be <see langword="null"/>.</param>
     /// <returns><see langword="true"/> if the item was successfully added; otherwise, <see langword="false"/>.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public bool Add(TItem item)
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         ThrowHelpers.ThrowIfNull(item);
 
-        if (TryAdd(item))
+        object key = _keySelector(item) ?? _defaultKey;
+        ImmutableHashSet<TItem>? currentValue, newValue;
+        do
         {
-            RaiseCollectionChanged(item, ItemChangeType.Added);
-            return true;
+            currentValue = _items.GetOrAdd(key, []);
+            newValue = currentValue.Add(item);
+            if (ReferenceEquals(newValue, currentValue))
+            {
+                return false;
+            }
         }
+        while (_items.TryUpdate(key, newValue, currentValue));
+        Interlocked.Increment(ref _count);
 
-        return false;
+        RaiseCollectionChanged(item, ItemChangeType.Added);
+
+        return true;
     }
 
     /// <summary>
@@ -141,9 +156,10 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     /// an empty set.
     /// </param>
     /// <returns><see langword="true"/> if the key was found and its items were removed; otherwise, <see langword="false"/>.</returns>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public bool Remove(TKey? key, out ImmutableHashSet<TItem> items)
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
 
         if (_items.TryRemove(key ?? _defaultKey, out ImmutableHashSet<TItem>? value))
         {
@@ -164,9 +180,10 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
     }
 
     /// <inheritdoc/>
+    /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public bool Remove(TItem item)
     {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
+        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
         ThrowHelpers.ThrowIfNull(item);
 
         object key = _keySelector(item) ?? _defaultKey;
@@ -253,44 +270,6 @@ public partial class ConcurrentGroupedCollection<TKey, TItem> :
             array[i++] = enumerator.Current;
         }
         return i;
-    }
-
-    private bool TryAdd(TItem item)
-    {
-        ThrowHelpers.ThrowIf(IsCompleted, ModificationAfterCompletionError);
-        ThrowHelpers.ThrowIfNull(item);
-
-        object key = _keySelector(item) ?? _defaultKey;
-
-        while (true)
-        {
-            if (_items.TryGetValue(key, out ImmutableHashSet<TItem>? currentValue))
-            {
-                ImmutableHashSet<TItem> computedValue = currentValue.Add(item);
-
-                if (ReferenceEquals(computedValue, currentValue))
-                {
-                    return false;
-                }
-
-                if (_items.TryUpdate(key, computedValue, currentValue))
-                {
-                    break;
-                }
-
-                continue;
-            }
-
-            ImmutableHashSet<TItem> items = [];
-
-            if (_items.TryAdd(key, items))
-            {
-                break;
-            }
-        }
-
-        Interlocked.Increment(ref _count);
-        return true;
     }
 
     /// <inheritdoc/>
