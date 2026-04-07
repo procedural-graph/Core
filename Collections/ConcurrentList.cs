@@ -79,7 +79,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
         get => _items[index];
         set
         {
-            ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+            ThrowHelpers.ThrowIfDisposed(Disposed, this);
             T oldItem;
 
             ImmutableList<T>? oldList, currentList = _items;
@@ -107,7 +107,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     public void Add(T item)
     {
         ThrowHelpers.ThrowIfNull(item);
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         if (ImmutableInterlocked.Update(ref _items, static (l, i) => l.Add(i), item))
         {
@@ -120,7 +120,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     public bool Remove(T item)
     {
         ThrowHelpers.ThrowIfNull(item);
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         if (ImmutableInterlocked.Update(ref _items, static (l, i) => l.Remove(i), item))
         {
@@ -135,7 +135,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public void RemoveAt(int index)
     {
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         ImmutableList<T>? oldList, currentList = _items;
         do
         {
@@ -153,7 +153,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public override bool Contains(T item)
     {
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         return _items.Contains(item);
     }
 
@@ -161,7 +161,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public int IndexOf(T item)
     {
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         return _items.IndexOf(item);
     }
 
@@ -169,7 +169,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public void Clear()
     {
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         ImmutableList<T> oldList = Interlocked.Exchange(ref _items, []);
         foreach (T item in oldList)
         {
@@ -181,7 +181,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public override int CopyTo(T[] array, int arrayIndex)
     {
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         ImmutableList<T> items = _items;
         items.CopyTo(array, arrayIndex);
         return items.Count;
@@ -192,7 +192,7 @@ public class ConcurrentList<T> : ConcurrentCollection<T, ImmutableList<T>.Enumer
     public void Insert(int index, T item)
     {
         ThrowHelpers.ThrowIfNull(item);
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         if (ImmutableInterlocked.Update(ref _items, Insert, new KeyValuePair<int, T>(index, item)))
         {
             RaiseCollectionChanged(item, ItemChangeType.Added);

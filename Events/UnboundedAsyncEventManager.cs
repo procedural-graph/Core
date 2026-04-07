@@ -34,7 +34,7 @@ public sealed class UnboundedAsyncEventManager<TArgs>(ILogger logger, UnboundedC
     /// <inheritdoc cref="AsyncEventManager{TArgs}.Subscribe(AsyncEventHandler{TArgs})"/>
     public void Publish(TArgs args)
     {
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         foreach (AsyncEventPublisher<TArgs> publisher in Publishers)
         {
             publisher.TryInvoke(args);

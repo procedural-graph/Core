@@ -10,7 +10,7 @@ namespace ProceduralGraph.Generic;
 /// Represents a base class for nodes within a graph structure, providing identity, parent-child relationships, and lifecycle management.
 /// </summary>
 /// <typeparam name="TSceneMember">The engine-specific type of scene hierarchy member. Must be a reference type.</typeparam>
-public abstract class LifecycleGraphNode<TSceneMember> : IGraphNode, IAsyncLifecycle, IDisposable where TSceneMember : class
+public abstract class LifecycleGraphNode<TSceneMember> : ManualDisposable, IGraphNode, IAsyncLifecycle where TSceneMember : class
 {
     IGraphNode? IGraphNode.Parent => null;
 
@@ -184,32 +184,8 @@ public abstract class LifecycleGraphNode<TSceneMember> : IGraphNode, IAsyncLifec
         return MutateState(value, &AndMutator, out _);
     }
 
-    private unsafe EntityState MutateState(EntityState value, delegate*<EntityState, EntityState, EntityState> mutator, out EntityState newState)
-    {
-        EntityState currentState = (EntityState)Volatile.Read(ref _status);
-        EntityState oldState;
-        while (true)
-        {
-            newState = mutator(currentState, value);
-            oldState = (EntityState)Interlocked.CompareExchange(ref _status, (byte)newState, (byte)currentState);
-            if (oldState == currentState)
-            {
-                break;
-            }
-            currentState = oldState;
-        }
-        return oldState;
-    }
-
-    private static EntityState OrMutator(EntityState current, EntityState value) => current | value;
-
-    private static EntityState AndMutator(EntityState current, EntityState value) => current & ~value;
-
-    /// <summary>
-    /// Called when the node is being disposed. 
-    /// This method initiates the disposal process by signaling cancellation to any ongoing operations and releasing resources.
-    /// </summary>
-    protected virtual void OnDisposing()
+    /// <inheritdoc/>
+    protected override void OnDisposing()
     {
         if (_stoppingCts is null)
         {
@@ -233,18 +209,27 @@ public abstract class LifecycleGraphNode<TSceneMember> : IGraphNode, IAsyncLifec
         }
     }
 
-    private void Dispose(bool disposing)
+    /// <inheritdoc/>
+    protected override bool TryDispose() => TrySetStateFlag(EntityState.Dead, out _);
+
+    private unsafe EntityState MutateState(EntityState value, delegate*<EntityState, EntityState, EntityState> mutator, out EntityState newState)
     {
-        if (TrySetStateFlag(EntityState.Dead, out _) && disposing)
+        EntityState currentState = (EntityState)Volatile.Read(ref _status);
+        EntityState oldState;
+        while (true)
         {
-            OnDisposing();
+            newState = mutator(currentState, value);
+            oldState = (EntityState)Interlocked.CompareExchange(ref _status, (byte)newState, (byte)currentState);
+            if (oldState == currentState)
+            {
+                break;
+            }
+            currentState = oldState;
         }
+        return oldState;
     }
 
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
-    }
+    private static EntityState OrMutator(EntityState current, EntityState value) => current | value;
+
+    private static EntityState AndMutator(EntityState current, EntityState value) => current & ~value;
 }

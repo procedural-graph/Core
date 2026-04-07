@@ -125,7 +125,7 @@ public sealed class ConcurrentGroupedCollection<TKey, TItem> :
     /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public bool Add(TItem item)
     {
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         ThrowHelpers.ThrowIfNull(item);
 
         object key = _keySelector(item) ?? _defaultKey;
@@ -159,7 +159,7 @@ public sealed class ConcurrentGroupedCollection<TKey, TItem> :
     /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public bool Remove(TKey? key, out ImmutableHashSet<TItem> items)
     {
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         if (_items.TryRemove(key ?? _defaultKey, out ImmutableHashSet<TItem>? value))
         {
@@ -183,7 +183,7 @@ public sealed class ConcurrentGroupedCollection<TKey, TItem> :
     /// <exception cref="ObjectDisposedException">Thrown if the collection has been disposed.</exception>
     public bool Remove(TItem item)
     {
-        ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         ThrowHelpers.ThrowIfNull(item);
 
         object key = _keySelector(item) ?? _defaultKey;

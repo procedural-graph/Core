@@ -14,7 +14,7 @@ namespace ProceduralGraph.Collections;
 /// </summary>
 /// <typeparam name="TKey">The type of the keys used to identify cache entries. Must be a non-nullable type.</typeparam>
 /// <typeparam name="TValue">The type of the values stored in the cache. Must be a reference type.</typeparam>
-public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : notnull where TValue : class
+public abstract class ConcurrentCache<TKey, TValue> : Disposable where TKey : notnull where TValue : class
 {
     private ref struct ReverseChronologyEnumerator(LinkedList<AccessLog> chronology)
     {
@@ -438,43 +438,23 @@ public abstract class ConcurrentCache<TKey, TValue> : IDisposable where TKey : n
         }
     }
 
-    /// <summary>
-    /// Releases the resources used by the current instance of the class, optionally disposing of managed resources.
-    /// </summary>
-    /// <param name="disposing">
-    /// <see langword="true"/> to release both managed and unmanaged resources; 
-    /// <see langword="false"/> to release only unmanaged resources.
-    /// </param>
-    protected virtual void Dispose(bool disposing)
+    /// <inheritdoc/>
+    protected override void OnDisposing()
     {
-        if (_disposed)
+        _queries.Writer.Complete();
+
+        if (_cts is null)
         {
             return;
         }
 
-        if (disposing)
+        try
         {
-            _queries.Writer.Complete();
-            if (_cts is { })
-            {
-                try
-                {
-                    _cts.Cancel();
-                }
-                finally
-                {
-                    _cts.Dispose();
-                }
-            }
+            _cts.Cancel();
         }
-
-        _disposed = true;
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
+        finally
+        {
+            _cts.Dispose();
+        }
     }
 }

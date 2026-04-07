@@ -12,7 +12,7 @@ namespace ProceduralGraph.Events;
 /// Represents a manager for asynchronous events with arguments of type <typeparamref name="TArgs"/>.
 /// </summary>
 /// <inheritdoc cref="AsyncEventHandler{TArgs}"/>
-public abstract class AsyncEventManager<TArgs> : IDisposable
+public abstract class AsyncEventManager<TArgs> : Disposable
 {
     /// <inheritdoc cref="IEnumerator{T}"/>
     protected ref struct Enumerator
@@ -91,11 +91,6 @@ public abstract class AsyncEventManager<TArgs> : IDisposable
     protected abstract ILogger Logger { get; }
 
     private ImmutableArray<AsyncEventSubscription<TArgs>> _subscriptions = [];
-    private int _disposed;
-    /// <summary>
-    /// Gets a value indicating whether the event manager has been disposed.
-    /// </summary>
-    protected bool IsDisposed => Volatile.Read(ref _disposed) == 1;
 
     /// <summary>
     /// Gets a collection of the current asynchronous event publishers subscribed to this event manager.
@@ -123,7 +118,7 @@ public abstract class AsyncEventManager<TArgs> : IDisposable
         ImmutableArray<AsyncEventSubscription<TArgs>> currentSubscriptions = _subscriptions, oldSubscriptions;
         while (true)
         {
-            ThrowHelpers.ThrowIfDisposed(IsDisposed, this);
+            ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
             for (int i = 0; i < currentSubscriptions.Length; i++)
             {
@@ -164,9 +159,26 @@ public abstract class AsyncEventManager<TArgs> : IDisposable
     /// <returns>A channel instance that can be used to send and receive messages of type <typeparamref name="TArgs"/>.</returns>
     protected abstract Channel<TArgs> CreateChannel();
 
+    /// <inheritdoc/>
+    protected override void OnDisposing()
+    {
+        ImmutableArray<AsyncEventSubscription<TArgs>> subscriptions;
+
+        lock (_syncRoot)
+        {
+            subscriptions = _subscriptions;
+            _subscriptions = [];
+        }
+
+        foreach (AsyncEventSubscription<TArgs> subscription in subscriptions)
+        {
+            subscription.Dispose();
+        }
+    }
+
     private void Unsubscribe(object? state)
     {
-        if (Volatile.Read(ref _disposed) == 1) 
+        if (Disposed) 
         {
             return;
         }
@@ -175,43 +187,5 @@ public abstract class AsyncEventManager<TArgs> : IDisposable
         {
             _subscriptions = _subscriptions.Remove((AsyncEventSubscription<TArgs>)state!);
         }
-    }
-
-    /// <summary>
-    /// Releases the unmanaged resources used by the object and, optionally, releases the managed resources.
-    /// </summary>
-    /// <param name="disposing">
-    /// <see langword="true"/> to release both managed and unmanaged resources; <see langword="false"/> to 
-    /// release only unmanaged resources.
-    /// </param>
-    protected virtual void Dispose(bool disposing)
-    {
-        if (Interlocked.Exchange(ref _disposed, 1) == 1)
-        {
-            return;
-        }
-
-        if (disposing)
-        {
-            ImmutableArray<AsyncEventSubscription<TArgs>> subscriptions;
-
-            lock (_syncRoot)
-            {
-                subscriptions = _subscriptions;
-                _subscriptions = [];
-            }
-
-            foreach (AsyncEventSubscription<TArgs> subscription in subscriptions)
-            {
-                subscription.Dispose();
-            }
-        }
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
     }
 }

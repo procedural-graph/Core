@@ -11,7 +11,7 @@ namespace ProceduralGraph.Collections.Unsafe;
 /// buffer.
 /// </summary>
 /// <typeparam name="T">The unmanaged value type of elements stored in the memory region.</typeparam>
-public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable where T : unmanaged
+public abstract unsafe class UnmanagedMemory<T> : Disposable, IBigCollection<T> where T : unmanaged
 {
     /// <summary>
     /// Enumerates the elements of a contiguous memory region.
@@ -116,17 +116,6 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
             _current = ((T*)_parent.DangerousGetHandle()) - 1;
         }
     }
-
-    /// <summary>
-    /// Gets a reference to a boolean value indicating whether the object has been disposed.
-    /// </summary>
-#if NET8_0_OR_GREATER
-    protected ref bool Disposed => ref _disposed;
-    private bool _disposed;
-#else
-    protected ref bool Disposed => ref System.Runtime.CompilerServices.Unsafe.As<int, bool>(ref _disposed);
-    private int _disposed;
-#endif
 
     /// <summary>
     /// Represents the handle to the unmanaged memory buffer used for data storage.
@@ -236,39 +225,11 @@ public abstract unsafe class UnmanagedMemory<T> : IBigCollection<T>, IDisposable
         return Handle;
     }
 
-    /// <summary>
-    /// Releases the resources used by the current instance and performs cleanup operations.
-    /// </summary>
-    protected virtual void Disposing()
+    /// <inheritdoc/>
+    protected override void OnDisposing()
     {
         Handle.Dispose();
         GC.RemoveMemoryPressure(Length * sizeof(T));
-    }
-
-    /// <summary>
-    /// Releases the unmanaged resources used by the object and optionally releases the managed resources.
-    /// </summary>
-    /// <param name="disposing">
-    /// <see langword="true"/> to release both managed and unmanaged resources; 
-    /// <see langword="false"/> to release only unmanaged resources.
-    /// </param>
-    protected virtual void Dispose(bool disposing)
-    {
-#if NET8_0_OR_GREATER
-        if (Interlocked.Exchange(ref _disposed, true) && disposing)
-#else
-        if (Interlocked.Exchange(ref _disposed, byte.MaxValue) == byte.MinValue && disposing)
-#endif
-        {
-            Disposing();
-        }
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        GC.SuppressFinalize(this);
     }
 
     IEnumerator<T> IEnumerable<T>.GetEnumerator() => GetAllocatingEnumerator();
