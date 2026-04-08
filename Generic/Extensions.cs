@@ -4,10 +4,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-#if NETFRAMEWORK
-using System.Diagnostics.CodeAnalysis;
-using System.Collections.Generic;
-#endif
 
 namespace ProceduralGraph.Generic;
 
@@ -81,22 +77,6 @@ public static class Extensions
 
         Task task = valueTask.AsTask();
         task.Forget(logger, context, cancellationToken);
-    }
-
-    /// <summary>
-    /// Spawns a new scene member using the specified manager and parent.
-    /// </summary>
-    /// <param name="manager">The scene member manager.</param>
-    /// <param name="parent">The parent scene member.</param>
-    /// <returns>A handle to the newly spawned scene member.</returns>
-    /// <exception cref="ArgumentNullException">Thrown if <paramref name="manager"/> is null.</exception>
-    /// <inheritdoc cref="LifecycleGraphNode{TSceneMember}"/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static SceneMemberHandle<TSceneMember> Spawn<TSceneMember>(this ISceneMemberManager<TSceneMember> manager, TSceneMember parent) 
-        where TSceneMember : class
-    {
-        ThrowHelpers.ThrowIfNull(manager, nameof(manager));
-        return new SceneMemberHandle<TSceneMember>(parent, manager);
     }
 
     /// <summary>

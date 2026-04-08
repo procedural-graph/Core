@@ -41,100 +41,28 @@ public interface ISceneMemberManager<TSceneMember> : IEqualityComparer<TSceneMem
     IReadOnlyCollection<TSceneMember> GetChildren(TSceneMember value);
 
     /// <summary>
-    /// Gets the name of the specified scene member.
-    /// </summary>
-    /// <param name="value">The scene member for which to retrieve the name. Cannot be <see langword="null"/>.</param>
-    /// <returns>The name of the specified scene member.</returns>
-    string GetName(TSceneMember value);
-
-    /// <summary>
-    /// Sets the name of the specified scene member.
-    /// </summary>
-    /// <param name="value">The scene member whose name is to be set.</param>
-    /// <param name="name">The new name to assign to the scene member.</param>
-    void SetName(TSceneMember value, string name);
-
-    /// <summary>
-    /// Gets the position of the specified scene member.
-    /// </summary>
-    /// <param name="value">The scene member for which to retrieve the position. Cannot be <see langword="null"/>.</param>
-    /// <returns>The position of the specified scene member.</returns>
-    Double3 GetPosition(TSceneMember value);
-
-    /// <summary>
-    /// Sets the position of the specified scene member to the given coordinates.
-    /// </summary>
-    /// <param name="value">The scene member whose position is to be updated.</param>
-    /// <param name="position">The new position for the scene member.</param>
-    void SetPosition(TSceneMember value, in Double3 position);
-
-    /// <summary>
-    /// Gets the rotation of the specified scene member as a quaternion.
-    /// </summary>
-    /// <param name="value">The scene member for which to retrieve the rotation.</param>
-    /// <returns>A quaternion representing the rotation of the specified scene member.</returns>
-    Quaternion GetRotation(TSceneMember value);
-
-    /// <summary>
-    /// Sets the rotation of the specified scene member to the given orientation.
-    /// </summary>
-    /// <param name="value">The scene member whose rotation is to be set.</param>
-    /// <param name="rotation">The new rotation to apply, represented as a quaternion.</param>
-    void SetRotation(TSceneMember value, in Quaternion rotation);
-
-    /// <summary>
-    /// Gets the scale of the specified scene member as a three-dimensional vector.
-    /// </summary>
-    /// <param name="value">The scene member for which to retrieve the scale.</param>
-    /// <returns>A <see cref="Vector3"/> representing the scale of the specified scene member.</returns>
-    Vector3 GetScale(TSceneMember value);
-
-    /// <summary>
-    /// Sets the scale of the specified scene member to the given value.
-    /// </summary>
-    /// <param name="value">The scene member whose scale will be set. Cannot be null.</param>
-    /// <param name="scale">The new scale to apply.</param>
-    void SetScale(TSceneMember value, in Vector3 scale);
-
-    /// <summary>
-    /// Retrieves the transform associated with the specified scene member.
-    /// </summary>
-    /// <param name="value">The scene member for which to obtain the transform.</param>
-    /// <returns>The transform corresponding to the specified scene member.</returns>
-    Transform GetTransform(TSceneMember value);
-
-    /// <summary>
-    /// Sets the transform for the specified scene member.
-    /// </summary>
-    /// <param name="value">The scene member whose transform is to be set.</param>
-    /// <param name="transform">The new transform to apply to the scene member.</param>
-    void SetTransform(TSceneMember value, in Transform transform);
-
-    /// <summary>
-    /// Creates a new child scene member and attaches it to the specified parent.
-    /// </summary>
-    /// <param name="parent">The parent scene member to which the new child will be attached. Cannot be <see langword="null"/>.</param>
-    /// <returns>The newly created child scene member.</returns>
-    TSceneMember CreateChild(TSceneMember parent);
-
-    /// <summary>
     /// Removes the specified scene member from the scene and releases any associated resources.
     /// </summary>
     /// <param name="value">The scene member to remove. Cannot be <see langword="null"/>.</param>
     void Destroy(TSceneMember value);
-    
-    /// <summary>
-    /// Determines whether the specified scene member has been destroyed.
-    /// </summary>
-    /// <param name="value">The scene member to check.</param>
-    /// <returns><see langword="true"/> if the scene member has been destroyed; otherwise, <see langword="false"/>.</returns>
-    bool IsDestroyed([NotNullWhen(false)] TSceneMember? value);
 
     /// <summary>
-    /// Subscribes to notifications when the transform of the specified scene member changes.
+    /// Creates a new child control associated with the specified parent scene member.
     /// </summary>
-    /// <param name="value">The scene member to monitor for transform changes.</param>
-    /// <param name="handler">The asynchronous event handler to invoke when the transform changes.</param>
-    /// <inheritdoc cref="AsyncEventManager{TArgs}.Subscribe(AsyncEventHandler{TArgs})"/>
-    AsyncEventSubscription<Transform> SubscribeTransformChanged(TSceneMember value, AsyncEventHandler<Transform> handler);
+    /// <param name="parent">
+    /// The parent scene member to which the new child control will be attached. 
+    /// Cannot be <see langword="null"/>.
+    /// </param>
+    /// <returns>A new control instance associated with the specified parent scene member.</returns>
+    Control<TSceneMember> CreateChild(TSceneMember parent);
+
+    /// <summary>
+    /// Gets an asynchronous event that is triggered when a new scene member is spawned.
+    /// </summary>
+    AsyncEvent<TSceneMember> Spawned { get; }
+
+    /// <summary>
+    /// Gets the asynchronous event that is triggered when a scene member is destroyed.
+    /// </summary>
+    AsyncEvent<TSceneMember> Destroyed { get; }
 }
