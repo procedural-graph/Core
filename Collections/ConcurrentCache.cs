@@ -95,8 +95,6 @@ public abstract class ConcurrentCache<TKey, TValue> : Disposable where TKey : no
     private readonly Channel<AccessQuery> _queries = Channel.CreateBounded<AccessQuery>(_channelOptions);
     private CancellationTokenSource? _cts = null;
 
-    private bool _disposed;
-
     /// <summary>
     /// Gets the duration for which the item remains valid before it expires.
     /// </summary>
@@ -127,7 +125,7 @@ public abstract class ConcurrentCache<TKey, TValue> : Disposable where TKey : no
     /// specified key.</returns>
     public async ValueTask<TValue> GetOrAddAsync(TKey key, FactoryDelegate factory, CancellationToken cancellationToken = default)
     {
-        ThrowHelpers.ThrowIfDisposed(_disposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         Entry entry = _entries.GetOrAdd(key, OnAdd, factory);
         _queries.Writer.TryWrite(new AccessQuery(key, DateTime.UtcNow));
         return await entry.Item.WaitAsync(cancellationToken);
@@ -165,7 +163,7 @@ public abstract class ConcurrentCache<TKey, TValue> : Disposable where TKey : no
     /// </returns>
     public async ValueTask<TValue?> RemoveAsync(TKey key, CancellationToken cancellationToken = default)
     {
-        ThrowHelpers.ThrowIfDisposed(_disposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         if (!TryRemove(key, out Entry result))
         {
@@ -195,7 +193,7 @@ public abstract class ConcurrentCache<TKey, TValue> : Disposable where TKey : no
     /// </returns>
     public bool Invalidate(TKey key)
     {
-        ThrowHelpers.ThrowIfDisposed(_disposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         if (TryRemove(key, out Entry result))
         {
@@ -217,7 +215,7 @@ public abstract class ConcurrentCache<TKey, TValue> : Disposable where TKey : no
     /// <exception cref="InvalidOperationException">Thrown if this method is called more than once on the same instance.</exception>
     public async Task HandleRequestsAsync(CancellationToken cancellationToken)
     {
-        ThrowHelpers.ThrowIfDisposed(_disposed, this);
+        ThrowHelpers.ThrowIfDisposed(Disposed, this);
         CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         if (Interlocked.CompareExchange(ref _cts, cts, null) is { })
         {
