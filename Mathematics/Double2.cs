@@ -263,6 +263,7 @@ public struct Double2 : IVector2<Double2, double>
         return sResult;
     }
 
+    /// <inheritdoc/>
     public static bool ApproximatelyEquals(in Double2 left, in Double2 right)
     {
         Double2 absDifference = Abs(left - right);
