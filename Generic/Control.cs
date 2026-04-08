@@ -290,7 +290,6 @@ public abstract class Control<TSceneMember> : Disposable, IEquatable<TSceneMembe
         Manager = manager ?? throw new ArgumentNullException(nameof(manager));
         ThrowHelpers.ThrowIfNull(logger);
         _transformChanged = AsyncEventPublisher.CreateConflating<Transform>(logger);
-        _transformChangedSubscription = _transformChanged.Event.Subscribe(OnTransformChanged);
         _syncRoot = new ReaderWriterLockSlim();
         _destroyedSubscription = manager.Destroyed.Subscribe(OnSceneMemberDestroyed);
     }
@@ -346,21 +345,7 @@ public abstract class Control<TSceneMember> : Disposable, IEquatable<TSceneMembe
     {
         base.OnDisposing();
         _syncRoot.Dispose();
-        _transformChangedSubscription.Dispose();
         _destroyedSubscription.Dispose();
-    }
-
-    private async ValueTask OnTransformChanged(Transform value, CancellationToken cancellationToken)
-    {
-        _syncRoot.EnterWriteLock();
-        try
-        {
-            _reference = value;
-        }
-        finally
-        {
-            _syncRoot.ExitWriteLock();
-        }
     }
 
     /// <summary>
