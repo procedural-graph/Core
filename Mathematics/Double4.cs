@@ -237,6 +237,25 @@ public struct Double4 : IVector4<Double4, double>
         return sResult;
     }
 
+    /// <inheritdoc/>
+    public static bool ApproximatelyEquals(in Double4 left, in Double4 right)
+    {
+        Double4 absDifference = Abs(left - right);
+
+#if NETCOREAPP3_0_OR_GREATER
+        if (Vector.IsHardwareAccelerated)
+        {
+            Vector256<double> tolerance = Vector256.Create<double>(float.EqualityThreshold);
+            return Vector256.LessThanOrEqualAll(absDifference.AsVector256(), tolerance);
+        }
+
+#endif
+        return absDifference.X <= float.EqualityThreshold
+            && absDifference.Y <= float.EqualityThreshold
+            && absDifference.Z <= float.EqualityThreshold
+            && absDifference.W <= float.EqualityThreshold;
+    }
+
     /// <summary>Transforms a three-dimensional vector by a specified 4x4 matrix.</summary>
     /// <param name="position">The vector to transform.</param>
     /// <param name="matrix">The transformation matrix.</param>
@@ -315,20 +334,14 @@ public struct Double4 : IVector4<Double4, double>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool Equals(Double4 other)
     {
-        Double4 absDifference = Abs(this - other);
-
 #if NETCOREAPP3_0_OR_GREATER
         if (Vector.IsHardwareAccelerated)
         {
-            Vector256<double> tolerance = Vector256.Create<double>(float.EqualityThreshold);
-            return Vector256.LessThanOrEqualAll(absDifference.AsVector256(), tolerance);
+            return Vector256.EqualsAll(AsVector256(), other.AsVector256());
         }
 
 #endif
-        return absDifference.X <= float.EqualityThreshold 
-            && absDifference.Y <= float.EqualityThreshold 
-            && absDifference.Z <= float.EqualityThreshold 
-            && absDifference.W <= float.EqualityThreshold;
+        return X == other.X && Y == other.Y && Z == other.Z && W == other.W;
     }
 
     /// <inheritdoc/>

@@ -1,4 +1,5 @@
-﻿using System.Runtime.CompilerServices;
+﻿using System.Numerics;
+using System.Runtime.CompilerServices;
 #if NET7_0_OR_GREATER
 using System;
 #endif
@@ -25,6 +26,55 @@ public static class VectorMath
         }
     }
 #endif
+
+    extension (Vector3)
+    {
+        /// <inheritdoc cref="IVector{TSelf, TValue}.ApproximatelyEquals(in TSelf, in TSelf)"/>
+        public static bool ApproximatelyEquals(in Vector3 left, in Vector3 right)
+        {
+            Vector3 absDifference = Vector3.Abs(left - right);
+#if NET9_0_OR_GREATER
+            Vector3 tolerance = Vector3.Create(float.EqualityThreshold);
+            return Vector3.LessThanAll(absDifference, tolerance);
+#else
+            return absDifference.X < float.EqualityThreshold 
+                && absDifference.Y < float.EqualityThreshold 
+                && absDifference.Z < float.EqualityThreshold;
+#endif
+        }
+    }
+
+    extension (Vector4)
+    {
+        /// <inheritdoc cref="IVector{TSelf, TValue}.ApproximatelyEquals(in TSelf, in TSelf)"/>
+        public static bool ApproximatelyEquals(in Vector4 left, in Vector4 right)
+        {
+            Vector4 absDifference = Vector4.Abs(left - right);
+#if NET9_0_OR_GREATER
+            Vector4 tolerance = Vector4.Create(float.EqualityThreshold);
+            return Vector4.LessThanAll(absDifference, tolerance);
+#else
+            return absDifference.X < float.EqualityThreshold 
+                && absDifference.Y < float.EqualityThreshold 
+                && absDifference.Z < float.EqualityThreshold
+                && absDifference.W < float.EqualityThreshold;
+#endif
+        }
+    }
+
+    extension (Quaternion)
+    {
+        /// <inheritdoc cref="IVector{TSelf, TValue}.ApproximatelyEquals(in TSelf, in TSelf)"/>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static bool ApproximatelyEquals(in Quaternion left, in Quaternion right)
+        {
+#if NET9_0_OR_GREATER
+            return Vector4.ApproximatelyEquals(left.AsVector4(), right.AsVector4());
+#else
+            return Vector4.ApproximatelyEquals(new(left.X, left.Y, left.Z, left.W), new(right.X, right.Y, right.Z, right.W));
+#endif
+        }
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void GetComponent<TVector, TComponent>(ref readonly TVector vector, int index, out TComponent component)

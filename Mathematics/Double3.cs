@@ -150,19 +150,14 @@ public struct Double3 : IVector3<Double3, double>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool Equals(Double3 other)
     {
-        Double3 absDifference = Abs(this - other);
-
 #if NETCOREAPP3_0_OR_GREATER
         if (Vector.IsHardwareAccelerated)
         {
-            Vector256<double> tolerance = Vector256.Create<double>(float.EqualityThreshold);
-            return Vector256.LessThanOrEqualAll(absDifference.AsVector256(), tolerance);
+            return Vector256.EqualsAll(AsVector256(), other.AsVector256());
         }
 
 #endif
-        return absDifference.X <= float.EqualityThreshold 
-            && absDifference.Y <= float.EqualityThreshold 
-            && absDifference.Z <= float.EqualityThreshold;
+        return X == other.X && Y == other.Y && Z == other.Z;
     }
 
     /// <inheritdoc/>
@@ -521,6 +516,24 @@ public struct Double3 : IVector3<Double3, double>
 
 #endif
         return left.X >= right.X && left.Y >= right.Y && left.Z >= right.Z;
+    }
+
+    /// <inheritdoc/>
+    public static bool ApproximatelyEquals(in Double3 left, in Double3 right)
+    {
+        Double3 absDifference = Abs(left - right);
+
+#if NETCOREAPP3_0_OR_GREATER
+        if (Vector.IsHardwareAccelerated)
+        {
+            Vector256<double> tolerance = Vector256.Create<double>(float.EqualityThreshold);
+            return Vector256.LessThanOrEqualAll(absDifference.AsVector256(), tolerance);
+        }
+
+#endif
+        return absDifference.X <= float.EqualityThreshold
+            && absDifference.Y <= float.EqualityThreshold
+            && absDifference.Z <= float.EqualityThreshold;
     }
 
     /// <summary>

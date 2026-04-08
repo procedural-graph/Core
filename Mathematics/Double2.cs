@@ -140,17 +140,14 @@ public struct Double2 : IVector2<Double2, double>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly bool Equals(Double2 other)
     {
-        Double2 absDifference = Abs(this - other);
-
 #if NETCOREAPP3_0_OR_GREATER
         if (Vector.IsHardwareAccelerated)
         {
-            Vector128<double> tolerance = Vector128.Create<double>(float.EqualityThreshold);
-            return Vector128.LessThanOrEqualAll(absDifference.AsVector128(), tolerance);
+            return Vector128.EqualsAll(AsVector128(), other.AsVector128());
         }
 
 #endif
-        return absDifference.X <= float.EqualityThreshold && absDifference.Y <= float.EqualityThreshold;
+        return X == other.X && Y == other.Y;
     }
 
     /// <inheritdoc/>
@@ -264,6 +261,21 @@ public struct Double2 : IVector2<Double2, double>
         sResult.X = double.Clamp(value.X, min.X, max.X);
         sResult.Y = double.Clamp(value.Y, min.Y, max.Y);
         return sResult;
+    }
+
+    public static bool ApproximatelyEquals(in Double2 left, in Double2 right)
+    {
+        Double2 absDifference = Abs(left - right);
+
+#if NETCOREAPP3_0_OR_GREATER
+        if (Vector.IsHardwareAccelerated)
+        {
+            Vector128<double> tolerance = Vector128.Create<double>(float.EqualityThreshold);
+            return Vector128.LessThanOrEqualAll(absDifference.AsVector128(), tolerance);
+        }
+
+#endif
+        return absDifference.X <= float.EqualityThreshold && absDifference.Y <= float.EqualityThreshold;
     }
 
 #if NETCOREAPP3_0_OR_GREATER

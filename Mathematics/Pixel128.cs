@@ -179,20 +179,14 @@ public struct Pixel128 : IVector4<Pixel128, float>
     /// <inheritdoc/>
     public readonly bool Equals(Pixel128 other)
     {
-        Pixel128 absDifference = Abs(this - other);
-
 #if NETCOREAPP3_0_OR_GREATER
         if (Vector.IsHardwareAccelerated)
         {
-            Vector128<float> tolerance = Vector128.Create(float.EqualityThreshold);
-            return Vector128.LessThanOrEqualAll(absDifference.AsVector128(), tolerance);
+            return Vector128.EqualsAll(AsVector128(), other.AsVector128());
         }
 
 #endif
-        return absDifference.Red <= float.EqualityThreshold &&
-               absDifference.Green <= float.EqualityThreshold &&
-               absDifference.Blue <= float.EqualityThreshold &&
-               absDifference.Alpha <= float.EqualityThreshold;
+        return Red == other.Red && Green == other.Green && Blue == other.Blue && Alpha == other.Alpha;
     }
 
     /// <inheritdoc/>
@@ -301,6 +295,25 @@ public struct Pixel128 : IVector4<Pixel128, float>
         sResult.Blue = float.Clamp(value.Blue, min.Blue, max.Blue);
         sResult.Alpha = float.Clamp(value.Alpha, min.Alpha, max.Alpha);
         return sResult;
+    }
+
+    /// <inheritdoc/>
+    public static bool ApproximatelyEquals(in Pixel128 left, in Pixel128 right)
+    {
+        Pixel128 absDifference = Abs(left - right);
+
+#if NETCOREAPP3_0_OR_GREATER
+        if (Vector.IsHardwareAccelerated)
+        {
+            Vector128<float> tolerance = Vector128.Create(float.EqualityThreshold);
+            return Vector128.LessThanOrEqualAll(absDifference.AsVector128(), tolerance);
+        }
+
+#endif
+        return absDifference.Red <= float.EqualityThreshold &&
+               absDifference.Green <= float.EqualityThreshold &&
+               absDifference.Blue <= float.EqualityThreshold &&
+               absDifference.Alpha <= float.EqualityThreshold;
     }
 
 #if NETCOREAPP3_0_OR_GREATER

@@ -242,6 +242,11 @@ public struct Pixel32 : IVector4<Pixel32, byte>
         return vector;
     }
 
+    static bool IVector<Pixel32, byte>.ApproximatelyEquals(in Pixel32 left, in Pixel32 right)
+    {
+        return left.Equals(right);
+    }
+
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     static Pixel32 IAdditionOperators<Pixel32, Pixel32, Pixel32>.operator +(Pixel32 left, Pixel32 right)
     {

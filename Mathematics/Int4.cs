@@ -477,4 +477,11 @@ internal struct Int4 : IVector4<Int4, short>
 #endif
         return new Int4((short)value.Red, (short)value.Green, (short)value.Blue, (short)value.Alpha);
     }
+
+#if NET7_0_OR_GREATER
+    static bool IVector<Int4, short>.ApproximatelyEquals(in Int4 left, in Int4 right)
+    {
+        return left.Equals(right);
+    }
+#endif
 }

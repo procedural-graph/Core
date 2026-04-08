@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Numerics;
 
 namespace ProceduralGraph.Mathematics;
 
@@ -89,6 +90,17 @@ public interface IVector<TSelf, TValue> : IEquatable<TSelf>, IFormattable
     /// <param name="max">The inclusive upper bound to which the value will be clamped.</param>
     /// <returns>The value constrained to be no less than the specified minimum and no greater than the specified maximum.</returns>
     static abstract TSelf Clamp(in TSelf value, in TSelf min, in TSelf max);
+
+    /// <summary>
+    /// Compares two values for approximate equality.
+    /// </summary>
+    /// <param name="left">The value to compare with <paramref name="right"/>.</param>
+    /// <param name="right">The value to compare with <paramref name="left"/>.</param>
+    /// <returns>
+    /// <see langword="true"/> if <paramref name="left"/> is approximately equal to <paramref name="right"/>; 
+    /// otherwise, <see langword="false"/>.
+    /// </returns>
+    static abstract bool ApproximatelyEquals(in TSelf left, in TSelf right);
 #endif
 
     /// <summary>
