@@ -6,6 +6,10 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
+using System.Buffers;
+#if NETCOREAPP3_0_OR_GREATER
+using System.Numerics;
+#endif
 
 using _Unsafe = System.Runtime.CompilerServices.Unsafe;
 
@@ -21,13 +25,36 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         public static int ID { get; } = NextID();
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    private readonly record struct Index(int TypeID, int StartIndex);
+
     private static int _currentTypeID;
 
     private const int BinarySearchThreshold = 16;
 
-    private readonly ImmutableArray<KeyValuePair<int, int>> _itemIndices;
+    private readonly ImmutableArray<Index> _itemIndices;
 
     private readonly ImmutableArray<object> _items;
+
+#if NETCOREAPP3_0_OR_GREATER
+    private static readonly Vector<int> _altMask;
+
+    static ImmutableObjectCollection()
+    {
+        if (!Vector.IsHardwareAccelerated)
+        {
+            return;
+        }
+
+        Span<int> mask = stackalloc int[Vector<int>.Count];
+        for (int i = 0; i < mask.Length; i++)
+        {
+            mask[i] = i % 2;
+        }
+
+        _altMask = new Vector<int>(mask);
+    }
+#endif
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ImmutableObjectCollection"/> class with no items.
@@ -38,7 +65,7 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         _itemIndices = [];
     }
 
-    private ImmutableObjectCollection(ImmutableArray<KeyValuePair<int, int>> itemIndices, ImmutableArray<object> items)
+    private ImmutableObjectCollection(ImmutableArray<Index> itemIndices, ImmutableArray<object> items)
     {
         _itemIndices = itemIndices;
         _items = items;
@@ -61,18 +88,9 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     /// </returns>
     public bool TryGetOne<T>([NotNullWhen(true)] out T? result) where T : class
     {
-        if (_itemIndices.IsDefaultOrEmpty)
+        if (TryGetIndex<T>(out _, out Index entry))
         {
-            result = null;
-            return false;
-        }
-
-        int index = IndexOf<T>();
-
-        if (index >= 0)
-        {
-            int itemStartIndex = _itemIndices[index].Value;
-            result = _Unsafe.As<T>(_items[itemStartIndex]);
+            result = _Unsafe.As<T>(_items[entry.StartIndex]);
             return true;
         }
 
@@ -117,19 +135,12 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     /// </returns>
     public ReadOnlySpan<T> GetMany<T>() where T : class
     {
-        if (_itemIndices.IsDefaultOrEmpty)
+        if (!TryGetIndex<T>(out _, out Index entry))
         {
             return [];
         }
 
-        int idIndex = IndexOf<T>();
-
-        if (idIndex < 0) 
-        {
-            return [];
-        }
-
-        int start = _itemIndices[idIndex].Value, end = start;
+        int start = entry.StartIndex, end = start;
         while (end < _items.Length && _items[end] is T)
         {
             end++;
@@ -162,26 +173,12 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     public ImmutableObjectCollection Add<T>(T item) where T : class
     {
         ThrowHelpers.ThrowIfNull(item);
-
-        int componentID = GetID<T>();
-
-        int index = IndexOf(componentID);
-        KeyValuePair<int, int> entry;
-
-        KeyValuePair<int, int>[] itemIDArray;
-        if (index < 0)
+        Index[] indicesArray;
+        ReadOnlySpan<Index> srcIndices = _itemIndices.AsSpan();
+        if (TryGetIndex<T>(out int index, out Index entry))
         {
-            int indicesLength = _itemIndices.Length;
-            index = ~index;
-            entry = new KeyValuePair<int, int>(componentID, _items.Length);
-            itemIDArray = CopyWithPreceding(_itemIndices, index, indicesLength + 1);
-            CopyTo(_itemIndices, index, itemIDArray, index + 1, indicesLength - index);
-        }
-        else
-        {
-            entry = _itemIndices[index];
             EqualityComparer<T> comparer = EqualityComparer<T>.Default;
-            for (int i = entry.Value; i < _items.Length && _items[i] is T currentItem; i++)
+            for (int i = entry.StartIndex; i < _items.Length && _items[i] is T currentItem; i++)
             {
                 if (comparer.Equals(currentItem, item))
                 {
@@ -189,18 +186,17 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
                 }
             }
 
-            int indicesLength = _itemIndices.Length;
-            itemIDArray = CopyWithPreceding(_itemIndices, index, indicesLength);
-            for (int i = index + 1; i < indicesLength; i++)
-            {
-                ref KeyValuePair<int, int> kvp = ref itemIDArray[i];
-                kvp = new KeyValuePair<int, int>(kvp.Key, kvp.Value + 1);
-            }
+            indicesArray = [.. srcIndices[..index], entry, .. srcIndices[index..]];
+            OffsetIndices(indicesArray.AsSpan(index + 1), 1);
         }
-        itemIDArray[index] = entry;
+        else
+        {
+            index = ~index;            
+            indicesArray = [.. srcIndices[..index], entry, .. srcIndices[index..]];
+        }
 
-        ImmutableArray<KeyValuePair<int, int>> itemIDs = ImmutableCollectionsMarshal.AsImmutableArray(itemIDArray);
-        ImmutableArray<object> items = _items.Insert(entry.Value, item);
+        ImmutableArray<Index> itemIDs = ImmutableCollectionsMarshal.AsImmutableArray(indicesArray);
+        ImmutableArray<object> items = _items.Insert(entry.StartIndex, item);
 
         return new ImmutableObjectCollection(itemIDs, items);
     }
@@ -216,63 +212,59 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     /// </returns>
     public ImmutableObjectCollection Remove<T>(T item) where T : class
     {
-        int idIndex = IndexOf<T>();
-        if (idIndex < 0)
-        {
-            return this;
-        }
-        KeyValuePair<int, int> entry = _itemIndices[idIndex];
-
-        EqualityComparer<T> comparer = EqualityComparer<T>.Default;
-        int start = entry.Value, end = start, matchCount = 0;
-        while (end < _items.Length && _items[end] is T candidate)
-        {
-            if (comparer.Equals(candidate, item))
-            {
-                matchCount++;
-            }
-            end++;
-        }
-
-        if (matchCount == 0)
+        if (!TryGetIndex<T>(out int index, out Index entry))
         {
             return this;
         }
 
-        int remaining = end - start - matchCount;
-
-        int length = _itemIndices.Length;
-        KeyValuePair<int, int>[] itemIDArray;
-        if (remaining == 0)
+        ImmutableArray<object> items;
+        EqualityComparer <T> comparer = EqualityComparer<T>.Default;
+        int count = 0;
+        object[] itemsArray = ArrayPool<object>.Shared.Rent(4);
+        try
         {
-            itemIDArray = CopyWithPreceding(_itemIndices, idIndex, length - 1);
-            CopyTo(_itemIndices, idIndex + 1, itemIDArray, idIndex, length - idIndex - 1);
-        }
-        else
-        {
-            itemIDArray = CopyWithPreceding(_itemIndices, idIndex, length);
-            itemIDArray[idIndex++] = entry;
-        }
-        for (int i = idIndex; i < itemIDArray.Length; i++)
-        {
-            ref KeyValuePair<int, int> kvp = ref itemIDArray[i];
-            kvp = new KeyValuePair<int, int>(kvp.Key, kvp.Value - matchCount);
-        }
-
-        object[] newItemsArray = new object[_items.Length - matchCount];
-        CopyTo(_items, 0, newItemsArray, 0, start);
-        int destination = start;
-        for (int i = start; i < end; i++)
-        {
-            if (!(_items[i] is T existing && comparer.Equals(existing, item)))
+            int start = entry.StartIndex, end = start;
+            for (; end < _items.Length && _items[end] is T candidate; end++)
             {
-                newItemsArray[destination++] = _items[i];
-            }
-        }
-        CopyTo(_items, end, newItemsArray, destination, _items.Length - end);
+                if (comparer.Equals(candidate, item))
+                {
+                    continue;
+                }
 
-        ImmutableArray<KeyValuePair<int, int>> itemIDs = ImmutableCollectionsMarshal.AsImmutableArray(itemIDArray);
-        ImmutableArray<object> items = ImmutableCollectionsMarshal.AsImmutableArray(newItemsArray);
+                int currentLength = itemsArray.Length;
+                if (count >= currentLength)
+                {
+                    object[] newArray = ArrayPool<object>.Shared.Rent(currentLength * 2);
+                    try
+                    {
+                        itemsArray.CopyTo(newArray);
+                        (itemsArray, newArray) = (newArray, itemsArray);
+                    }
+                    finally
+                    {
+                        ArrayPool<object>.Shared.Return(newArray, clearArray: true);
+                    }
+                }
+
+                itemsArray[count++] = candidate;
+            }
+
+            if (count == 0)
+            {
+                return this;
+            }
+
+            items = ImmutableArray.Create(itemsArray, 0, count);
+        }
+        finally
+        {
+            ArrayPool<object>.Shared.Return(itemsArray, clearArray: true);
+        }
+    
+        ReadOnlySpan<Index> srcIndices = _itemIndices.AsSpan();
+        Index[] indicesArray = count == 0 ? [.. srcIndices[..index], .. srcIndices[(index + 1)..]] : [..srcIndices];
+        OffsetIndices(indicesArray.AsSpan(index), -count);
+        ImmutableArray<Index> itemIDs = ImmutableCollectionsMarshal.AsImmutableArray(indicesArray);
 
         return new ImmutableObjectCollection(itemIDs, items);
     }
@@ -297,13 +289,6 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         return _items.GetEnumerator();
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private int IndexOf<T>() where T : class
-    {
-        int id = GetID<T>();
-        return IndexOf(id);
-    }
-
     private int IndexOf(int id)
     {
         int length = _itemIndices.Length;
@@ -312,7 +297,7 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         {
             for (int i = 0; i < length; i++)
             {
-                switch (_itemIndices[i].Key)
+                switch (_itemIndices[i].TypeID)
                 {
                     case int value when value > id: return ~i;
                     case int value when value == id: return i;
@@ -326,7 +311,7 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         while (low <= high)
         {
             int mid = low + ((high - low) >> 1);
-            switch (_itemIndices[mid].Key)
+            switch (_itemIndices[mid].TypeID)
             {
                 case int value when value == id: return mid;
                 case int value when value < id: low = mid + 1; break;
@@ -337,24 +322,47 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         return ~low;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static T[] CopyWithPreceding<T>(ImmutableArray<T> source, int index, int length)
+    private bool TryGetIndex<T>(out int index, out Index result) where T : class
     {
-#if NET5_0_OR_GREATER
-        T[] itemIDs = GC.AllocateUninitializedArray<T>(length);
-#else
-        T[] itemIDs = new T[length];
-#endif
-        CopyTo(source, 0, itemIDs, 0, index);
-        return itemIDs;
+        int id = GetID<T>(), length = _itemIndices.Length;
+        if (length > 0)
+        {
+            index = IndexOf(id);
+            if (index >= 0)
+            {
+                result = _itemIndices[index];
+                return true;
+            }
+        }
+        else
+        {
+            index = ~0;
+        }
+        result = new(id, length);
+        return false;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static void CopyTo<T>(ImmutableArray<T> source, int sourceIndex, T[] destination, int destinationIndex, int count)
+    private static void OffsetIndices(Span<Index> indices, int count)
     {
-        ReadOnlySpan<T> sourceSpan = source.AsSpan(sourceIndex, count);
-        Span<T> destinationSpan = destination.AsSpan(destinationIndex, count);
-        sourceSpan.CopyTo(destinationSpan);
+        int index = 0, length = indices.Length;
+
+#if NETCOREAPP3_0_OR_GREATER
+        if (Vector.IsHardwareAccelerated)
+        {
+            int indicesPerVector = Vector<int>.Count / 2;
+            Vector<int> offset = _altMask * count;
+            for (; (length - index) >= indicesPerVector; index += indicesPerVector)
+            {
+                _Unsafe.As<Index, Vector<int>>(ref indices[index]) += offset;
+            }
+        }
+#endif
+
+        for (; index < length; index++)
+        {
+            ref Index newEntry = ref indices[index];
+            newEntry = newEntry with { StartIndex = newEntry.StartIndex + count };
+        }
     }
 
     private IEnumerator<object> GetEnumeratorImpl()
