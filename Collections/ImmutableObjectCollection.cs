@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Threading;
-using System.Buffers;
 #if NETCOREAPP3_0_OR_GREATER
 using System.Numerics;
 #endif
@@ -128,9 +127,24 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     /// <summary>
     /// Retrieves all items of the specified type from the collection.
     /// </summary>
+    /// <remarks>
+    /// <list type="termdef">
+    /// <item>
+    /// <term>.NET Framework</term>
+    /// <description>Allocates a new array to hold the items of type <typeparamref name="T"/>.</description>
+    /// </item>
+    /// <item>
+    /// <term>.NET Core &amp; .NET Standard</term>
+    /// <description>
+    /// Creates a read-only span directly over the contiguous segment of items of type <typeparamref name="T"/> 
+    /// in the collection, without any additional allocations.
+    /// </description>
+    /// </item>
+    /// </list>
+    /// </remarks>
     /// <typeparam name="T">The type of items to retrieve from the collection.</typeparam>
     /// <returns>
-    /// A <see cref="ReadOnlySpan{T}"/> containing all contiguous items of type <typeparamref name="T"/> 
+    /// A read-only span containing all contiguous items of type <typeparamref name="T"/> 
     /// found in the collection; or <see cref="ReadOnlySpan{T}.Empty"/> if no such items are present.
     /// </returns>
     public ReadOnlySpan<T> GetMany<T>() where T : class
@@ -160,24 +174,33 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
 #endif
     }
 
+    /// <inheritdoc cref="Add{T}(T, IEqualityComparer{T})"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ImmutableObjectCollection Add<T>(T item) where T : class
+    {
+        return Add(item, EqualityComparer<T>.Default);
+    }
+
     /// <summary>
     /// Returns a new collection with the specified item of type <typeparamref name="T"/> added.
     /// </summary>
     /// <typeparam name="T">The type of the item to add.</typeparam>
     /// <param name="item">The item to add to the collection. Cannot be <see langword="null"/>.</param>
+    /// <param name="comparer">An object that determines whether two instances of <typeparamref name="T"/> are equal.</param>
     /// <returns>
     /// A new <see cref="ImmutableObjectCollection"/> that contains the specified item, or the current collection if the item is
     /// already present.
     /// </returns>
     /// <exception cref="ArgumentNullException">Thrown if the <paramref name="item"/> is <see langword="null"/>.</exception>
-    public ImmutableObjectCollection Add<T>(T item) where T : class
+    public ImmutableObjectCollection Add<T>(T item, IEqualityComparer<T> comparer) where T : class
     {
         ThrowHelpers.ThrowIfNull(item);
+        ThrowHelpers.ThrowIfNull(comparer);
+
         Index[] indicesArray;
         ReadOnlySpan<Index> srcIndices = _itemIndices.AsSpan();
         if (TryGetIndex<T>(out int index, out Index entry))
         {
-            EqualityComparer<T> comparer = EqualityComparer<T>.Default;
             for (int i = entry.StartIndex; i < _items.Length && _items[i] is T currentItem; i++)
             {
                 if (comparer.Equals(currentItem, item))
@@ -201,72 +224,149 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         return new ImmutableObjectCollection(itemIDs, items);
     }
 
+    /// <inheritdoc cref="Remove{T}(T, IEqualityComparer{T})"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ImmutableObjectCollection Remove<T>(T item) where T : class
+    {
+        return Remove(item, EqualityComparer<T>.Default);
+    }
+
     /// <summary>
     /// Returns a new collection with all instances of the specified item removed from the collection.
     /// </summary>
     /// <typeparam name="T">The type of the item to remove.</typeparam>
     /// <param name="item">The item to remove from the collection.</param>
+    /// <param name="comparer">An object that determines whether two instances of <typeparamref name="T"/> are equal.</param>
     /// <returns>
     /// A new <see cref="ImmutableObjectCollection"/> with the specified item removed; or the current 
     /// collection if the item is not found.
     /// </returns>
-    public ImmutableObjectCollection Remove<T>(T item) where T : class
+    public ImmutableObjectCollection Remove<T>(T item, IEqualityComparer<T> comparer) where T : class
     {
+        ThrowHelpers.ThrowIfNull(item);
+        ThrowHelpers.ThrowIfNull(comparer);
+
         if (!TryGetIndex<T>(out int index, out Index entry))
         {
             return this;
         }
 
         ImmutableArray<object> items;
-        EqualityComparer <T> comparer = EqualityComparer<T>.Default;
-        int count = 0;
-        object[] itemsArray = ArrayPool<object>.Shared.Rent(4);
+        int removedCount, keptCount = 0;
+
+        object[]? itemsArray = RentedArray.Acquire<object>();
         try
         {
             int start = entry.StartIndex, end = start;
+            bool modified = false;
             for (; end < _items.Length && _items[end] is T candidate; end++)
             {
                 if (comparer.Equals(candidate, item))
                 {
+                    modified = true;
                     continue;
                 }
 
-                int currentLength = itemsArray.Length;
-                if (count >= currentLength)
-                {
-                    object[] newArray = ArrayPool<object>.Shared.Rent(currentLength * 2);
-                    try
-                    {
-                        itemsArray.CopyTo(newArray);
-                        (itemsArray, newArray) = (newArray, itemsArray);
-                    }
-                    finally
-                    {
-                        ArrayPool<object>.Shared.Return(newArray, clearArray: true);
-                    }
-                }
-
-                itemsArray[count++] = candidate;
+                int i = keptCount++;
+                RentedArray.Grow(ref itemsArray, keptCount);
+                itemsArray[i] = candidate;
             }
 
-            if (count == 0)
+            if (!modified)
             {
                 return this;
             }
 
-            items = ImmutableArray.Create(itemsArray, 0, count);
+            ReadOnlySpan<object> currentItems = _items.AsSpan();
+            items = [.. currentItems[..start], .. itemsArray.AsSpan(0, keptCount), .. currentItems[end..]];
+
+            removedCount = end - start - keptCount;
         }
         finally
         {
-            ArrayPool<object>.Shared.Return(itemsArray, clearArray: true);
+            RentedArray.Return(ref itemsArray);
         }
-    
+
         ReadOnlySpan<Index> srcIndices = _itemIndices.AsSpan();
-        Index[] indicesArray = count == 0 ? [.. srcIndices[..index], .. srcIndices[(index + 1)..]] : [..srcIndices];
-        OffsetIndices(indicesArray.AsSpan(index), -count);
+        Index[] indicesArray = keptCount == 0 ? [.. srcIndices[..index], .. srcIndices[(index + 1)..]] : [.. srcIndices];
+        OffsetIndices(indicesArray.AsSpan(index), -removedCount);
         ImmutableArray<Index> itemIDs = ImmutableCollectionsMarshal.AsImmutableArray(indicesArray);
 
         return new ImmutableObjectCollection(itemIDs, items);
+    }
+
+    /// <inheritdoc cref="Replace{T}(T, T, IEqualityComparer{T})"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ImmutableObjectCollection Replace<T>(T oldItem, T newItem) where T : class
+    {
+        return Replace(oldItem, newItem, EqualityComparer<T>.Default);
+    }
+
+    /// <summary>
+    /// Replaces all instances of <paramref name="oldItem"/> with <paramref name="newItem"/> in the collection.
+    /// </summary>
+    /// <typeparam name="T">The type of the items to replace. Must be a reference type.</typeparam>
+    /// <param name="oldItem">
+    /// The item to replace with <paramref name="newItem"/>. 
+    /// Cannot be <see langword="null"/>.
+    /// </param>
+    /// <param name="newItem">
+    /// The item to replace all occurrences of <paramref name="oldItem"/> with. 
+    /// Cannot be <see langword="null"/>.
+    /// </param>
+    /// <param name="comparer">An object that determines whether two instances of <typeparamref name="T"/> are equal.</param>
+    /// <returns>
+    /// A new <see cref="ImmutableObjectCollection"/> with all instances of <paramref name="oldItem"/> replaced 
+    /// with <paramref name="newItem"/>; or the current collection if no replacements were made.
+    /// </returns>
+    public ImmutableObjectCollection Replace<T>(T oldItem, T newItem, IEqualityComparer<T> comparer) where T : class
+    {
+        ThrowHelpers.ThrowIfNull(newItem);
+        ThrowHelpers.ThrowIfNull(oldItem);
+        ThrowHelpers.ThrowIfNull(comparer);
+
+        if (!TryGetIndex<T>(out _, out Index entry))
+        {
+            return this;
+        }
+
+        ImmutableArray<object> newItems;
+        object[]? itemsArray = RentedArray.Acquire<object>();
+        try
+        {
+            bool modified = false;
+            int start = entry.StartIndex, end = start, count = 0;
+
+            for (; end < _items.Length && _items[end] is T existingItem; end++)
+            {
+                T resultantItem;
+                if (comparer.Equals(existingItem, oldItem))
+                {
+                    modified = true;
+                    resultantItem = newItem;
+                }
+                else
+                {
+                    resultantItem = existingItem;
+                }
+                int i = count++;
+                RentedArray.Grow(ref itemsArray, count);
+                itemsArray[i] = resultantItem;
+            }
+
+            if (modified)
+            {
+                ReadOnlySpan<object> currentItems = _items.AsSpan();
+                newItems = [.. currentItems[..start], .. itemsArray.AsSpan(0, count), .. currentItems[end..]];
+                return new ImmutableObjectCollection(_itemIndices, newItems);
+            }
+        }
+        finally
+        {
+            RentedArray.Return(ref itemsArray);
+        }
+
+        return this;
     }
 
     /// <summary>
@@ -367,8 +467,10 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
 
     private IEnumerator<object> GetEnumeratorImpl()
     {
-        object[] components = ImmutableCollectionsMarshal.AsArray(this._items)!;
-        return (IEnumerator<object>)components.GetEnumerator();
+        foreach (object item in _items)
+        {
+            yield return item;
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
