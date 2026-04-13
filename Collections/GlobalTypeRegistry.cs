@@ -61,12 +61,14 @@ internal class GlobalTypeRegistry
 
     private static TypeRegistration Update(Type key, TypeRegistration existing, int inheritorID)
     {
-        ImmutableArray<int> assignableTo = existing.DerivedTypes;
-        int index = assignableTo.IndexOfSorted(inheritorID);
+        ImmutableArray<int> derived = existing.DerivedTypes;
+
+        ReadOnlySpan<int> derivedSpan = derived.AsSpan();
+        int index = derivedSpan.IndexOfSorted(inheritorID);
 
         return index >= 0 ? existing : existing with
         {
-            DerivedTypes = assignableTo.Insert(~index, inheritorID),
+            DerivedTypes = derived.Insert(~index, inheritorID),
             Order = inheritorID < existing.ID ? existing.Order + 1 : existing.Order
         };
     }

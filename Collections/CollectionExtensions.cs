@@ -7,11 +7,9 @@ internal static class CollectionExtensions
 {
     public const int BinarySearchThreshold = 16;
 
-    public static int IndexOfSorted<TCollection, TItem>(this TCollection values, TItem value) 
-        where TCollection : IReadOnlyList<TItem>
-        where TItem : IComparable<TItem>
+    public static int IndexOfSorted<TItem, TComparand>(this ReadOnlySpan<TItem> values, TComparand value) where TItem : IComparable<TComparand>
     {
-        int low = 0, length = values.Count;
+        int low = 0, length = values.Length;
 
         if (length == 0)
         {

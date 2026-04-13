@@ -19,20 +19,13 @@ namespace ProceduralGraph.Collections;
 public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
 {
     [StructLayout(LayoutKind.Sequential)]
-    internal readonly record struct Index(int TypeID, int StartIndex) : IComparable, IComparable<Index>
+    internal readonly record struct Index(int TypeID, int StartIndex) : IComparable<int>
     {
-        public int CompareTo(object? obj)
+        public int CompareTo(int other)
         {
-            return obj is Index other ? CompareTo(other) : 1;
-        }
-
-        public int CompareTo(Index other)
-        {
-            return TypeID.CompareTo(other.TypeID);
+            return TypeID.CompareTo(other);
         }
     }
-
-    private const int BinarySearchThreshold = 16;
 
     private readonly ImmutableArray<Index> _itemIndices;
 
@@ -97,8 +90,8 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         }
 
         ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
-        (int _, int order, ImmutableArray<int> assignableTo) = GlobalTypeRegistry.Get<T>();
-        ReadOnlySpan<int> ids = assignableTo.AsSpan();
+        (int _, int order, ImmutableArray<int> derived) = GlobalTypeRegistry.Get<T>();
+        ReadOnlySpan<int> ids = derived.AsSpan();
         return TryGetOne(indices, ids[order..], out result, out int low) || TryGetOne(indices[..low], ids[..order], out result, out _);
     }
 
@@ -125,11 +118,11 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     /// </returns>
     public IEnumerable<T> GetMany<T>() where T : class
     {
-        (int _, int order, ImmutableArray<int> derivedTypes) = GlobalTypeRegistry.Get<T>();
-        ReadOnlySpan<int> ids = derivedTypes.AsSpan();
+        (int _, int order, ImmutableArray<int> derived) = GlobalTypeRegistry.Get<T>();
+        ReadOnlySpan<int> ids = derived.AsSpan();
         ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
         ReadOnlySpan<object> items = _items.AsSpan();
-        int low = IndexOf(indices, derivedTypes[order]), position = low, offset = 0, index = order + 1;
+        int low = indices.IndexOfSorted(derived[order]), position = low, offset = 0, index = order + 1;
         for (int i = 0; i < 2; i++)
         {
             do
@@ -149,7 +142,7 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
                     offset += ~position;
                 }
 
-                position = IndexOf(indices[offset..], ids[index]);
+                position = indices[offset..].IndexOfSorted(ids[index]);
             }
             while (++index < ids.Length);
 
@@ -159,7 +152,7 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
                 break;
             }
             indices = indices[..(low >= 0 ? low : ~low)];
-            position = IndexOf(indices, ids[0]);
+            position = indices.IndexOfSorted(ids[0]);
             offset = 0;
             index = 1;
         }
@@ -193,7 +186,7 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         try
         {
             TypeRegistration registration = GlobalTypeRegistry.Get<T>();
-            int index = IndexOf(indices, registration.ID), start;
+            int index = indices.IndexOfSorted(registration.ID), start;
             Index entry;
 
             if (index < 0)
@@ -265,11 +258,11 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         {
             bool modified = false;
 
-            (int _, int _, ImmutableArray<int> derivedTypes) = GlobalTypeRegistry.Get<T>();
+            (int _, int _, ImmutableArray<int> derived) = GlobalTypeRegistry.Get<T>();
             int position = indices.Length;
-            for (int i = derivedTypes.Length - 1; i >= 0; i--)
+            for (int i = derived.Length - 1; i >= 0; i--)
             {
-                position = IndexOf(indices[..position], derivedTypes[i]);
+                position = indices[..position].IndexOfSorted(derived[i]);
                 int adjacent = position - 1;
 
                 if (position < 0)
@@ -344,7 +337,7 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     {
         result = null;
 
-        int position = IndexOf(indices, ids[0]), index = 1, offset = 0;
+        int position = indices.IndexOfSorted(ids[0]), index = 1, offset = 0;
         low = position;
 
         do
@@ -357,46 +350,13 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
             }
 
             offset += ~position;
-            position = IndexOf(indices[offset..], ids[index++]);
+            position = indices[offset..].IndexOfSorted(ids[index++]);
         }
         while (index < ids.Length);
 
         low = low >= 0 ? low : ~low;
 
         return result is { };
-    }
-
-    private static int IndexOf(ReadOnlySpan<Index> indices, int id)
-    {
-        int length = indices.Length;
-
-        if (length < BinarySearchThreshold)
-        {
-            for (int i = 0; i < length; i++)
-            {
-                switch (indices[i].TypeID)
-                {
-                    case int value when value > id: return ~i;
-                    case int value when value == id: return i;
-                }
-            }
-
-            return ~length;
-        }
-
-        int low = 0, high = length - 1;
-        while (low <= high)
-        {
-            int mid = low + ((high - low) >> 1);
-            switch (indices[mid].TypeID)
-            {
-                case int value when value == id: return mid;
-                case int value when value < id: low = mid + 1; break;
-                default: high = mid - 1; break;
-            }
-        }
-
-        return ~low;
     }
 
     private static void OffsetIndices(Span<Index> indices, int count)
