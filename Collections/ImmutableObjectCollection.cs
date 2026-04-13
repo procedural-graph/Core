@@ -5,7 +5,6 @@ using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
-using System.Threading;
 #if NETCOREAPP3_0_OR_GREATER
 using System.Numerics;
 #endif
@@ -19,15 +18,19 @@ namespace ProceduralGraph.Collections;
 /// </summary>
 public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
 {
-    private readonly ref struct TypeIdentity<TSelf>
-    {
-        public static int ID { get; } = NextID();
-    }
-
     [StructLayout(LayoutKind.Sequential)]
-    private readonly record struct Index(int TypeID, int StartIndex);
+    internal readonly record struct Index(int TypeID, int StartIndex) : IComparable, IComparable<Index>
+    {
+        public int CompareTo(object? obj)
+        {
+            return obj is Index other ? CompareTo(other) : 1;
+        }
 
-    private static int _currentTypeID;
+        public int CompareTo(Index other)
+        {
+            return TypeID.CompareTo(other.TypeID);
+        }
+    }
 
     private const int BinarySearchThreshold = 16;
 
@@ -87,14 +90,16 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     /// </returns>
     public bool TryGetOne<T>([NotNullWhen(true)] out T? result) where T : class
     {
-        if (TryGetIndex<T>(out _, out Index entry))
+        if (_items.IsDefaultOrEmpty)
         {
-            result = _Unsafe.As<T>(_items[entry.StartIndex]);
-            return true;
+            result = null;
+            return false;
         }
 
-        result = null;
-        return false;
+        ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
+        (int _, int order, ImmutableArray<int> assignableTo) = GlobalTypeRegistry.Get<T>();
+        ReadOnlySpan<int> ids = assignableTo.AsSpan();
+        return TryGetOne(indices, ids[order..], out result, out int low) || TryGetOne(indices[..low], ids[..order], out result, out _);
     }
 
     /// <summary>
@@ -106,72 +111,58 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public T GetOne<T>() where T : class
     {
-        ThrowHelpers.ThrowIf(!TryGetOne(out T? component), $"Object of type {typeof(T).FullName} not found.");
-        return component;
-    }
-
-    /// <summary>
-    /// Determines whether the collection contains an object of the specified type.
-    /// </summary>
-    /// <typeparam name="T">The type of the object to check for.</typeparam>
-    /// <returns>
-    /// <see langword="true"/> if the collection contains an object of the specified type; 
-    /// otherwise, <see langword="false"/>.
-    /// </returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool Contains<T>() where T : class
-    {
-        return TryGetOne<T>(out _);
+        ThrowHelpers.ThrowIf(!TryGetOne(out T? obj), $"Object of type {typeof(T).FullName} not found.");
+        return obj;
     }
 
     /// <summary>
     /// Retrieves all items of the specified type from the collection.
     /// </summary>
-    /// <remarks>
-    /// <list type="termdef">
-    /// <item>
-    /// <term>.NET Framework</term>
-    /// <description>Allocates a new array to hold the items of type <typeparamref name="T"/>.</description>
-    /// </item>
-    /// <item>
-    /// <term>.NET Core &amp; .NET Standard</term>
-    /// <description>
-    /// Creates a read-only span directly over the contiguous segment of items of type <typeparamref name="T"/> 
-    /// in the collection, without any additional allocations.
-    /// </description>
-    /// </item>
-    /// </list>
-    /// </remarks>
     /// <typeparam name="T">The type of items to retrieve from the collection.</typeparam>
     /// <returns>
     /// A read-only span containing all contiguous items of type <typeparamref name="T"/> 
     /// found in the collection; or <see cref="ReadOnlySpan{T}.Empty"/> if no such items are present.
     /// </returns>
-    public ReadOnlySpan<T> GetMany<T>() where T : class
+    public IEnumerable<T> GetMany<T>() where T : class
     {
-        if (!TryGetIndex<T>(out _, out Index entry))
+        (int _, int order, ImmutableArray<int> derivedTypes) = GlobalTypeRegistry.Get<T>();
+        ReadOnlySpan<int> ids = derivedTypes.AsSpan();
+        ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
+        ReadOnlySpan<object> items = _items.AsSpan();
+        int low = IndexOf(indices, derivedTypes[order]), position = low, offset = 0, index = order + 1;
+        for (int i = 0; i < 2; i++)
         {
-            return [];
-        }
+            do
+            {
+                if (position >= 0)
+                {
+                    int start = indices[offset += position].StartIndex;
+                    int end = ++offset < indices.Length ? indices[offset].StartIndex : _items.Length;
 
-        int start = entry.StartIndex, end = start;
-        while (end < _items.Length && _items[end] is T)
-        {
-            end++;
-        }
+                    foreach (object obj in items[start..end])
+                    {
+                        yield return Cast<T>(obj);
+                    }
+                }
+                else
+                {
+                    offset += ~position;
+                }
 
-        ref object objRef = ref _Unsafe.AsRef(in _items.ItemRef(start));
-        ref T itemRef = ref _Unsafe.As<object, T>(ref objRef);
-#if NETFRAMEWORK
-        T[] itemArray = new T[end - start];
-        for (int i = 0; i < itemArray.Length; i++)
-        {
-            itemArray[i] = _Unsafe.Add(ref itemRef, i);
+                position = IndexOf(indices[offset..], ids[index]);
+            }
+            while (++index < ids.Length);
+
+            ids = ids[..order];
+            if (ids.IsEmpty)
+            {
+                break;
+            }
+            indices = indices[..(low >= 0 ? low : ~low)];
+            position = IndexOf(indices, ids[0]);
+            offset = 0;
+            index = 1;
         }
-        return itemArray;
-#else
-        return MemoryMarshal.CreateReadOnlySpan(ref itemRef, end - start);
-#endif
     }
 
     /// <inheritdoc cref="Add{T}(T, IEqualityComparer{T})"/>
@@ -197,31 +188,52 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         ThrowHelpers.ThrowIfNull(item);
         ThrowHelpers.ThrowIfNull(comparer);
 
-        Index[] indicesArray;
-        ReadOnlySpan<Index> srcIndices = _itemIndices.AsSpan();
-        if (TryGetIndex<T>(out int index, out Index entry))
+        Span<Index> indices = RentedArray.Copy(_itemIndices, out Index[]? indicesArray);
+        Span<object> items = RentedArray.Copy(_items, out object[]? itemsArray);
+        try
         {
-            for (int i = entry.StartIndex; i < _items.Length && _items[i] is T currentItem; i++)
+            TypeRegistration registration = GlobalTypeRegistry.Get<T>();
+            int index = IndexOf(indices, registration.ID), start;
+            Index entry;
+
+            if (index < 0)
             {
-                if (comparer.Equals(currentItem, item))
+                index = ~index;
+                indices = RentedArray.Grow(ref indicesArray, indices.Length + 1);
+                indices[index..].CopyTo(indices[(index + 1)..]);
+                start = items.Length;
+                entry = new Index(registration.ID, start);
+                indices[index] = entry;
+            }
+            else
+            {
+                entry = indices[index];
+                start = entry.StartIndex;
+                int adjacent = index + 1;
+                int end = adjacent < indices.Length ? indices[adjacent].StartIndex : items.Length;
+                foreach (object obj in items[start..end])
                 {
-                    return this;
+                    T candidate = _Unsafe.As<T>(obj);
+                    if (comparer.Equals(candidate, item))
+                    {
+                        return this;
+                    }
                 }
             }
 
-            indicesArray = [.. srcIndices[..index], entry, .. srcIndices[index..]];
-            OffsetIndices(indicesArray.AsSpan(index + 1), 1);
+            items = RentedArray.Grow(ref itemsArray, items.Length + 1);
+            items[start..^1].CopyTo(items[(start + 1)..]);
+            items[start] = item;
+
+            OffsetIndices(indices[index..], 1);
+
+            return new ImmutableObjectCollection([.. indices], [.. items]);
         }
-        else
+        finally
         {
-            index = ~index;            
-            indicesArray = [.. srcIndices[..index], entry, .. srcIndices[index..]];
+            RentedArray.Return(ref indicesArray);
+            RentedArray.Return(ref itemsArray);
         }
-
-        ImmutableArray<Index> itemIDs = ImmutableCollectionsMarshal.AsImmutableArray(indicesArray);
-        ImmutableArray<object> items = _items.Insert(entry.StartIndex, item);
-
-        return new ImmutableObjectCollection(itemIDs, items);
     }
 
     /// <inheritdoc cref="Remove{T}(T, IEqualityComparer{T})"/>
@@ -246,127 +258,66 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         ThrowHelpers.ThrowIfNull(item);
         ThrowHelpers.ThrowIfNull(comparer);
 
-        if (!TryGetIndex<T>(out int index, out Index entry))
-        {
-            return this;
-        }
+        Span<Index> indices = RentedArray.Copy(_itemIndices, out Index[]? indicesArray);
+        Span<object> items = RentedArray.Copy(_items, out object[]? itemsArray);
 
-        ImmutableArray<object> items;
-        int removedCount, keptCount = 0;
-
-        object[]? itemsArray = RentedArray.Acquire<object>();
         try
         {
-            int start = entry.StartIndex, end = start;
             bool modified = false;
-            for (; end < _items.Length && _items[end] is T candidate; end++)
+
+            (int _, int _, ImmutableArray<int> derivedTypes) = GlobalTypeRegistry.Get<T>();
+            int position = indices.Length;
+            for (int i = derivedTypes.Length - 1; i >= 0; i--)
             {
-                if (comparer.Equals(candidate, item))
+                position = IndexOf(indices[..position], derivedTypes[i]);
+                int adjacent = position - 1;
+
+                if (position < 0)
                 {
-                    modified = true;
+                    position = ~position;
                     continue;
                 }
 
-                int i = keptCount++;
-                RentedArray.Grow(ref itemsArray, keptCount);
-                itemsArray[i] = candidate;
+                modified = true;
+
+                Index entry = indices[position];
+                int start = adjacent >= 0 ? indices[adjacent].StartIndex : 0;
+                int end = entry.StartIndex;
+
+                Span<object> cluster = items[start..end];
+                for (int j = cluster.Length - 1; j >= 0; j--)
+                {
+                    if (!comparer.Equals(Cast<T>(cluster[j]), item))
+                    {
+                        continue;
+                    }
+
+                    cluster[(j + 1)..].CopyTo(cluster[j..]);
+                    cluster = cluster[..^1];
+                }
+
+                int length = cluster.Length, remaining = end - start - length;
+
+                items[end..].CopyTo(items[(start + length)..]);
+                items = items[..^length];
+
+                if (length == 0)
+                {
+                    indices[position..].CopyTo(indices[adjacent..]);
+                    indices = indices[..^1];
+                }
+                OffsetIndices(indices[position..], -remaining);
+
+                position = adjacent;
             }
 
-            if (!modified)
-            {
-                return this;
-            }
-
-            ReadOnlySpan<object> currentItems = _items.AsSpan();
-            items = [.. currentItems[..start], .. itemsArray.AsSpan(0, keptCount), .. currentItems[end..]];
-
-            removedCount = end - start - keptCount;
+            return modified ? new ImmutableObjectCollection([.. indices], [.. items]) : this;
         }
         finally
         {
+            RentedArray.Return(ref indicesArray);
             RentedArray.Return(ref itemsArray);
         }
-
-        ReadOnlySpan<Index> srcIndices = _itemIndices.AsSpan();
-        Index[] indicesArray = keptCount == 0 ? [.. srcIndices[..index], .. srcIndices[(index + 1)..]] : [.. srcIndices];
-        OffsetIndices(indicesArray.AsSpan(index), -removedCount);
-        ImmutableArray<Index> itemIDs = ImmutableCollectionsMarshal.AsImmutableArray(indicesArray);
-
-        return new ImmutableObjectCollection(itemIDs, items);
-    }
-
-    /// <inheritdoc cref="Replace{T}(T, T, IEqualityComparer{T})"/>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ImmutableObjectCollection Replace<T>(T oldItem, T newItem) where T : class
-    {
-        return Replace(oldItem, newItem, EqualityComparer<T>.Default);
-    }
-
-    /// <summary>
-    /// Replaces all instances of <paramref name="oldItem"/> with <paramref name="newItem"/> in the collection.
-    /// </summary>
-    /// <typeparam name="T">The type of the items to replace. Must be a reference type.</typeparam>
-    /// <param name="oldItem">
-    /// The item to replace with <paramref name="newItem"/>. 
-    /// Cannot be <see langword="null"/>.
-    /// </param>
-    /// <param name="newItem">
-    /// The item to replace all occurrences of <paramref name="oldItem"/> with. 
-    /// Cannot be <see langword="null"/>.
-    /// </param>
-    /// <param name="comparer">An object that determines whether two instances of <typeparamref name="T"/> are equal.</param>
-    /// <returns>
-    /// A new <see cref="ImmutableObjectCollection"/> with all instances of <paramref name="oldItem"/> replaced 
-    /// with <paramref name="newItem"/>; or the current collection if no replacements were made.
-    /// </returns>
-    public ImmutableObjectCollection Replace<T>(T oldItem, T newItem, IEqualityComparer<T> comparer) where T : class
-    {
-        ThrowHelpers.ThrowIfNull(newItem);
-        ThrowHelpers.ThrowIfNull(oldItem);
-        ThrowHelpers.ThrowIfNull(comparer);
-
-        if (!TryGetIndex<T>(out _, out Index entry))
-        {
-            return this;
-        }
-
-        ImmutableArray<object> newItems;
-        object[]? itemsArray = RentedArray.Acquire<object>();
-        try
-        {
-            bool modified = false;
-            int start = entry.StartIndex, end = start, count = 0;
-
-            for (; end < _items.Length && _items[end] is T existingItem; end++)
-            {
-                T resultantItem;
-                if (comparer.Equals(existingItem, oldItem))
-                {
-                    modified = true;
-                    resultantItem = newItem;
-                }
-                else
-                {
-                    resultantItem = existingItem;
-                }
-                int i = count++;
-                RentedArray.Grow(ref itemsArray, count);
-                itemsArray[i] = resultantItem;
-            }
-
-            if (modified)
-            {
-                ReadOnlySpan<object> currentItems = _items.AsSpan();
-                newItems = [.. currentItems[..start], .. itemsArray.AsSpan(0, count), .. currentItems[end..]];
-                return new ImmutableObjectCollection(_itemIndices, newItems);
-            }
-        }
-        finally
-        {
-            RentedArray.Return(ref itemsArray);
-        }
-
-        return this;
     }
 
     /// <summary>
@@ -389,15 +340,41 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         return _items.GetEnumerator();
     }
 
-    private int IndexOf(int id)
+    private bool TryGetOne<T>(ReadOnlySpan<Index> indices, ReadOnlySpan<int> ids, out T? result, out int low) where T : class
     {
-        int length = _itemIndices.Length;
+        result = null;
+
+        int position = IndexOf(indices, ids[0]), index = 1, offset = 0;
+        low = position;
+
+        do
+        {
+            if (position >= 0)
+            {
+                Index entry = indices[offset + position];
+                result = Cast<T>(_items[entry.StartIndex]);
+                break;
+            }
+
+            offset += ~position;
+            position = IndexOf(indices[offset..], ids[index++]);
+        }
+        while (index < ids.Length);
+
+        low = low >= 0 ? low : ~low;
+
+        return result is { };
+    }
+
+    private static int IndexOf(ReadOnlySpan<Index> indices, int id)
+    {
+        int length = indices.Length;
 
         if (length < BinarySearchThreshold)
         {
             for (int i = 0; i < length; i++)
             {
-                switch (_itemIndices[i].TypeID)
+                switch (indices[i].TypeID)
                 {
                     case int value when value > id: return ~i;
                     case int value when value == id: return i;
@@ -411,7 +388,7 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         while (low <= high)
         {
             int mid = low + ((high - low) >> 1);
-            switch (_itemIndices[mid].TypeID)
+            switch (indices[mid].TypeID)
             {
                 case int value when value == id: return mid;
                 case int value when value < id: low = mid + 1; break;
@@ -420,26 +397,6 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         }
 
         return ~low;
-    }
-
-    private bool TryGetIndex<T>(out int index, out Index result) where T : class
-    {
-        int id = GetID<T>(), length = _itemIndices.Length;
-        if (length > 0)
-        {
-            index = IndexOf(id);
-            if (index >= 0)
-            {
-                result = _itemIndices[index];
-                return true;
-            }
-        }
-        else
-        {
-            index = ~0;
-        }
-        result = new(id, length);
-        return false;
     }
 
     private static void OffsetIndices(Span<Index> indices, int count)
@@ -465,6 +422,16 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static T Cast<T>(object obj) where T : class
+    {
+#if DEBUG
+        return (T)obj;
+#else
+        return _Unsafe.As<T>(obj);
+#endif
+    }
+
     private IEnumerator<object> GetEnumeratorImpl()
     {
         foreach (object item in _items)
@@ -472,11 +439,6 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
             yield return item;
         }
     }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static int GetID<T>() => TypeIdentity<T>.ID;
-
-    private static int NextID() => Interlocked.Increment(ref _currentTypeID);
 
     IEnumerator<object> IEnumerable<object>.GetEnumerator()
     {
