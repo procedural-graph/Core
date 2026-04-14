@@ -16,10 +16,10 @@ namespace ProceduralGraph.Collections;
 /// <summary>
 /// Represents an immutable collection of objects, providing efficient lookup and retrieval by object type.
 /// </summary>
-public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
+public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCollection<object>, IServiceProvider
 {
     [StructLayout(LayoutKind.Sequential)]
-    internal readonly record struct Index(int TypeID, int StartIndex) : IComparable<int>
+    private readonly record struct Index(int TypeID, int StartIndex) : IComparable<int>
     {
         public int CompareTo(int other)
         {
@@ -69,30 +69,21 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     /// <inheritdoc/>
     public int Count => _items.Length;
 
-    /// <summary>
-    /// Attempts to retrieve a single instance of type <typeparamref name="T"/> from the collection.
-    /// </summary>
+    bool ICollection<object>.IsReadOnly => true;
+
     /// <typeparam name="T">The type of object to retrieve. Must be a reference type.</typeparam>
-    /// <param name="result">
-    /// When this method returns, contains the first instance of <typeparamref name="T"/> if one is found; otherwise, 
-    /// <see langword="null"/>.
-    /// </param>
-    /// <returns>
-    /// <see langword="true"/> if an object of type <typeparamref name="T"/> was found and assigned to result; 
-    /// otherwise, <see langword="false"/>.
-    /// </returns>
+    /// <inheritdoc cref="TryGetOne(Type, out object)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool TryGetOne<T>([NotNullWhen(true)] out T? result) where T : class
     {
-        if (_items.IsDefaultOrEmpty)
+        if (TryGetOne(typeof(T), out object? obj))
         {
-            result = null;
-            return false;
+            result = Cast<T>(obj);
+            return true;
         }
 
-        ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
-        (int _, int order, ImmutableArray<int> derived) = GlobalTypeRegistry.Get<T>();
-        ReadOnlySpan<int> ids = derived.AsSpan();
-        return TryGetOne(indices, ids[order..], out result, out int low) || TryGetOne(indices[..low], ids[..order], out result, out _);
+        result = null;
+        return false;
     }
 
     /// <summary>
@@ -109,6 +100,108 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     }
 
     /// <summary>
+    /// Attempts to retrieve a single instance of the specified type from the collection.
+    /// </summary>
+    /// <param name="type">The type of object to retrieve.</param>
+    /// <param name="result">
+    /// When this method returns, contains the first instance of the specified type if one is found; otherwise, 
+    /// <see langword="null"/>.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> if an object of the specified type was found and assigned to <paramref name="result"/>; 
+    /// otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool TryGetOne([NotNullWhen(true)] Type? type, [NotNullWhen(true)] out object? result)
+    {
+        if (_items.IsDefaultOrEmpty || type is null)
+        {
+            result = null;
+            return false;
+        }
+
+        ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
+        (int _, int order, ImmutableArray<int> derived) = GlobalTypeRegistry.Get(type);
+        ReadOnlySpan<int> ids = derived.AsSpan();
+
+        int end = indices.Length;
+        do
+        {
+            int start = 0, index = order, low = indices.IndexOfSorted(ids[index]), pos = low;
+        Check:
+            if (pos < 0)
+            {
+                start += ~pos;
+                if (++index < ids.Length)
+                {
+                    pos = indices[start..end].IndexOfSorted(ids[index]);
+                    goto Check;
+                }
+            }
+            else
+            {
+                Index entry = indices[start + pos];
+                result = _items[entry.StartIndex];
+                return true;
+            }
+            end = low < 0 ? ~low : low;
+            ids = ids[..order];
+            order = 0;
+        }
+        while (!ids.IsEmpty);
+        result = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Retrieves the first object of the specified type from the collection.
+    /// </summary>
+    /// <returns>The first object of the specified type found in the collection.</returns>
+    /// <returns>The first object of the specified type found in the collection.</returns>
+    /// <inheritdoc cref="TryGetOne(Type, out object)"/>
+    /// <exception cref="InvalidOperationException">Thrown if no object of the specified type is found.</exception>
+    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="type"/> is <see langword="null"/>.</exception>
+    public object GetOne(Type type)
+    {
+        ThrowHelpers.ThrowIfNull(type);
+        ThrowHelpers.ThrowIf(!TryGetOne(type, out object? result), $"Object of type {type.FullName} not found.");
+        return result;
+    }
+
+    /// <inheritdoc/>
+    public bool Contains(object item)
+    {
+        ThrowHelpers.ThrowIfNull(item);
+
+        if (_items.IsDefaultOrEmpty)
+        {
+            return false;
+        }
+
+        TypeRegistration registration = GlobalTypeRegistry.Get(item.GetType());
+        ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
+        int index = indices.IndexOfSorted(registration.ID);
+
+        if (index < 0)
+        {
+            return false;
+        }
+
+        int start = indices[index].StartIndex;
+        int length = (++index < indices.Length ? indices[index].StartIndex : _items.Length) - start;
+        ReadOnlySpan<object> items = _items.AsSpan(start, length);
+
+        foreach (object obj in items)
+        {
+            if (Equals(obj, item))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Retrieves all items of the specified type from the collection.
     /// </summary>
     /// <typeparam name="T">The type of items to retrieve from the collection.</typeparam>
@@ -116,8 +209,13 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     /// A read-only span containing all contiguous items of type <typeparamref name="T"/> 
     /// found in the collection; or <see cref="ReadOnlySpan{T}.Empty"/> if no such items are present.
     /// </returns>
-    public IEnumerable<T> GetMany<T>() where T : class
+    public IEnumerable<T> GetAll<T>() where T : class
     {
+        if (_items.IsDefaultOrEmpty)
+        {
+            yield break;
+        }
+
         (int _, int order, ImmutableArray<int> derived) = GlobalTypeRegistry.Get<T>();
         ReadOnlySpan<int> ids = derived.AsSpan();
         ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
@@ -313,6 +411,12 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         }
     }
 
+    /// <inheritdoc/>
+    public void CopyTo(object[] array, int arrayIndex)
+    {
+        _items.CopyTo(array, arrayIndex);
+    }
+
     /// <summary>
     /// Creates a new read-only span over the items in this collection.
     /// </summary>
@@ -331,32 +435,6 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
     public ImmutableArray<object>.Enumerator GetEnumerator()
     {
         return _items.GetEnumerator();
-    }
-
-    private bool TryGetOne<T>(ReadOnlySpan<Index> indices, ReadOnlySpan<int> ids, out T? result, out int low) where T : class
-    {
-        result = null;
-
-        int position = indices.IndexOfSorted(ids[0]), index = 1, offset = 0;
-        low = position;
-
-        do
-        {
-            if (position >= 0)
-            {
-                Index entry = indices[offset + position];
-                result = Cast<T>(_items[entry.StartIndex]);
-                break;
-            }
-
-            offset += ~position;
-            position = indices[offset..].IndexOfSorted(ids[index++]);
-        }
-        while (index < ids.Length);
-
-        low = low >= 0 ? low : ~low;
-
-        return result is { };
     }
 
     private static void OffsetIndices(Span<Index> indices, int count)
@@ -400,12 +478,34 @@ public sealed class ImmutableObjectCollection : IReadOnlyCollection<object>
         }
     }
 
-    IEnumerator<object> IEnumerable<object>.GetEnumerator()
+    void ICollection<object>.Add(object item)
+    {
+        ThrowHelpers.ThrowNotSupportedException(this);
+    }
+
+    void ICollection<object>.Clear()
+    {
+        ThrowHelpers.ThrowNotSupportedException(this);
+    }
+
+    bool ICollection<object>.Remove(object item)
+    {
+        ThrowHelpers.ThrowNotSupportedException(this);
+        return false;
+    }
+
+    object? IServiceProvider.GetService(Type serviceType)
+    {
+        TryGetOne(serviceType, out object? result);
+        return result;
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
     {
         return GetEnumeratorImpl();
     }
 
-    IEnumerator IEnumerable.GetEnumerator()
+    IEnumerator<object> IEnumerable<object>.GetEnumerator()
     {
         return GetEnumeratorImpl();
     }
