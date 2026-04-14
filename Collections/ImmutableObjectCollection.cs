@@ -18,6 +18,194 @@ namespace ProceduralGraph.Collections;
 /// </summary>
 public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCollection<object>, IServiceProvider
 {
+    /// <summary>
+    /// Represents a filtered query over an immutable collection of objects.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to filter by.</typeparam>
+    public readonly struct Query<T> : IEnumerable<T> where T : class
+    {
+        private readonly ImmutableObjectCollection _collection;
+
+        internal Query(ImmutableObjectCollection collection)
+        {
+            _collection = collection;
+        }
+
+        /// <inheritdoc/>
+        public IEnumerator<T> GetEnumerator()
+        {
+            return new Enumerator<T>(_collection);
+        }
+
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return new Enumerator(_collection, typeof(T));
+        }
+    }
+
+    /// <inheritdoc cref="Query{T}"/>
+    public readonly struct Query : IEnumerable
+    {
+        private readonly ImmutableObjectCollection _collection;
+
+        /// <summary>
+        /// Gets the type filter for this query.
+        /// </summary>
+        public Type Filter { get; }
+
+        internal Query(ImmutableObjectCollection collection, Type filter)
+        {
+            _collection = collection;
+            Filter = filter;
+        }
+
+        /// <inheritdoc cref="IEnumerable.GetEnumerator"/>
+        public Enumerator GetEnumerator()
+        {
+            return new Enumerator(_collection, Filter);
+        }
+
+        IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    }
+
+    /// <summary>
+    /// Iterates over the elements of an immutable object collection, providing a strongly-typed enumerator
+    /// for use with collection traversal constructs.
+    /// </summary>
+    /// <remarks>Yields objects of the same type before ones derived from it, in no particular order.</remarks>
+    /// <typeparam name="T">The type of objects to enumerate.</typeparam>
+    public struct Enumerator<T> : IEnumerator<T> where T : class
+    {
+        private Enumerator _enumerator;
+
+        internal Enumerator(ImmutableObjectCollection collection)
+        {
+            _enumerator = new Enumerator(collection, typeof(T));
+        }
+
+        /// <inheritdoc/>
+        public readonly T Current => Cast<T>(_enumerator.Current);
+        readonly object IEnumerator.Current => _enumerator.Current;
+
+        /// <inheritdoc/>
+        public bool MoveNext() => _enumerator.MoveNext();
+
+        /// <inheritdoc/>
+        public void Reset() => _enumerator.Reset();
+
+        readonly void IDisposable.Dispose() { }
+    }
+
+    /// <inheritdoc cref="Enumerator{T}"/>
+    public struct Enumerator : IEnumerator
+    {
+        private readonly Type _type;
+        private readonly ImmutableArray<object> _items;
+        private readonly ImmutableArray<Index> _indices;
+        private ReadOnlyMemory<int> _ids;
+        private int _order, _low, _index, _position, _start, _end;
+        private ClusterEnumerator _clusterEnumerator;
+
+        internal Enumerator(ImmutableObjectCollection collection, Type type)
+        {
+            _type = type;
+            _items = collection._items;
+            _indices = collection._itemIndices;
+            Reset();
+            Current = default!;
+        }
+
+        /// <inheritdoc/>
+        public object Current { get; private set; }
+
+        /// <inheritdoc/>
+        public bool MoveNext()
+        {
+            while (!_clusterEnumerator.MoveNext())
+            {
+                while (_position < 0)
+                {
+                    if (++_index > _ids.Length)
+                    {
+                        _index = -1;
+                        (_end, _low) = (_low, 0);
+                        _start = 0;
+                        _ids = _ids[.._order];
+                        _order = 0;
+                    }
+
+                    if (_ids.IsEmpty)
+                    {
+                        return false;
+                    }
+
+                    _start += ~_position;
+                    _position = AdvancePosition();
+                }
+
+                int clusterStart = _indices[_position].StartIndex;
+                int clusterEnd = ++_position < _indices.Length ? _indices[_position].StartIndex : _items.Length;
+                _clusterEnumerator = new ClusterEnumerator(_items, clusterStart, clusterEnd);
+            }
+
+            Current = _clusterEnumerator.Current;
+
+            _start += _position;
+            _position = AdvancePosition();
+
+            return true;
+        }
+
+        /// <inheritdoc/>
+        public void Reset()
+        {
+            (int _, _order, ImmutableArray<int> derived) = GlobalTypeRegistry.Get(_type);
+            _ids = derived.AsMemory();
+
+            ReadOnlySpan<Index> indices = _indices.AsSpan();
+            _low = indices.IndexOfSorted(derived[_order]);
+            _low = _low >= 0 ? _low : ~_low;
+            _position = _low;
+
+            _index = _order - 1;
+
+            _end = _indices.Length;
+
+            _clusterEnumerator = default;
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        private readonly int AdvancePosition()
+        {
+            ReadOnlySpan<Index> indices = _indices.AsSpan(_start, _end - _start);
+            return indices.IndexOfSorted(_ids.Span[_index]);
+        }
+    }
+
+    private struct ClusterEnumerator(ImmutableArray<object> items, int start, int end) : IEnumerator
+    {
+        private readonly ImmutableArray<object> _items = items;
+        private readonly int _start = start;
+        private readonly int _end = end;
+        private int _index = start - 1;
+
+        public object Current { readonly get; private set; } = default!;
+
+        public bool MoveNext()
+        {
+            if (++_index >= _end)
+            {
+                return false;
+            }
+
+            Current = _items[_index];
+
+            return true;
+        }
+
+        public void Reset() => _index = _start - 1;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private readonly record struct Index(int TypeID, int StartIndex) : IComparable<int>
     {
@@ -201,59 +389,26 @@ public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCo
         return false;
     }
 
+    /// <param name="type">The type of items to retrieve.</param>
+    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="type"/> is <see langword="null"/>.</exception>
+    /// <inheritdoc cref="GetAll{T}()"/>
+    public Query GetAll(Type type)
+    {
+        ThrowHelpers.ThrowIfNull(type);
+        return new Query(this, type);
+    }
+
     /// <summary>
     /// Retrieves all items of the specified type from the collection.
     /// </summary>
     /// <typeparam name="T">The type of items to retrieve from the collection.</typeparam>
     /// <returns>
-    /// A read-only span containing all contiguous items of type <typeparamref name="T"/> 
-    /// found in the collection; or <see cref="ReadOnlySpan{T}.Empty"/> if no such items are present.
+    /// An enumerable sequence containing all contiguous items of the specified type found in the 
+    /// collection; or an empty sequence if no such items are present.
     /// </returns>
-    public IEnumerable<T> GetAll<T>() where T : class
+    public Query<T> GetAll<T>() where T : class
     {
-        if (_items.IsDefaultOrEmpty)
-        {
-            yield break;
-        }
-
-        (int _, int order, ImmutableArray<int> derived) = GlobalTypeRegistry.Get<T>();
-        ReadOnlySpan<int> ids = derived.AsSpan();
-        ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
-        ReadOnlySpan<object> items = _items.AsSpan();
-        int low = indices.IndexOfSorted(derived[order]), position = low, offset = 0, index = order + 1;
-        for (int i = 0; i < 2; i++)
-        {
-            do
-            {
-                if (position >= 0)
-                {
-                    int start = indices[offset += position].StartIndex;
-                    int end = ++offset < indices.Length ? indices[offset].StartIndex : _items.Length;
-
-                    foreach (object obj in items[start..end])
-                    {
-                        yield return Cast<T>(obj);
-                    }
-                }
-                else
-                {
-                    offset += ~position;
-                }
-
-                position = indices[offset..].IndexOfSorted(ids[index]);
-            }
-            while (++index < ids.Length);
-
-            ids = ids[..order];
-            if (ids.IsEmpty)
-            {
-                break;
-            }
-            indices = indices[..(low >= 0 ? low : ~low)];
-            position = indices.IndexOfSorted(ids[0]);
-            offset = 0;
-            index = 1;
-        }
+        return new Query<T>(this);
     }
 
     /// <inheritdoc cref="Add{T}(T, IEqualityComparer{T})"/>
