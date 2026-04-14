@@ -356,11 +356,9 @@ public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCo
     }
 
     /// <inheritdoc/>
-    public bool Contains(object item)
+    public bool Contains([NotNullWhen(true)] object? item)
     {
-        ThrowHelpers.ThrowIfNull(item);
-
-        if (_items.IsDefaultOrEmpty)
+        if (_items.IsDefaultOrEmpty || item is null)
         {
             return false;
         }
@@ -411,34 +409,37 @@ public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCo
         return new Query<T>(this);
     }
 
-    /// <inheritdoc cref="Add{T}(T, IEqualityComparer{T})"/>
+    /// <typeparam name="T"> The type of the item to add. Must be a reference type.</typeparam>
+    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="item"/> is <see langword="null"/>.</exception>
+    /// <inheritdoc cref="Add(object, Type)"/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ImmutableObjectCollection Add<T>(T item) where T : class
     {
-        return Add(item, EqualityComparer<T>.Default);
+        return Add(item, typeof(T));
     }
 
     /// <summary>
-    /// Returns a new collection with the specified item of type <typeparamref name="T"/> added.
+    /// Returns a new collection with an specified item of the specified type added.
     /// </summary>
-    /// <typeparam name="T">The type of the item to add.</typeparam>
+    /// <param name="type">The type of the item to add.</param>
     /// <param name="item">The item to add to the collection. Cannot be <see langword="null"/>.</param>
-    /// <param name="comparer">An object that determines whether two instances of <typeparamref name="T"/> are equal.</param>
     /// <returns>
     /// A new <see cref="ImmutableObjectCollection"/> that contains the specified item, or the current collection if the item is
     /// already present.
     /// </returns>
-    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="item"/> is <see langword="null"/>.</exception>
-    public ImmutableObjectCollection Add<T>(T item, IEqualityComparer<T> comparer) where T : class
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if either the <paramref name="item"/> or the <paramref name="type"/> is <see langword="null"/>.
+    /// </exception>
+    public ImmutableObjectCollection Add(object item, Type type)
     {
         ThrowHelpers.ThrowIfNull(item);
-        ThrowHelpers.ThrowIfNull(comparer);
+        ThrowHelpers.ThrowIfNull(type);
 
         Span<Index> indices = RentedArray.Copy(_itemIndices, out Index[]? indicesArray);
         Span<object> items = RentedArray.Copy(_items, out object[]? itemsArray);
         try
         {
-            TypeRegistration registration = GlobalTypeRegistry.Get<T>();
+            TypeRegistration registration = GlobalTypeRegistry.Get(type);
             int index = indices.IndexOfSorted(registration.ID), start;
             Index entry;
 
@@ -459,8 +460,7 @@ public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCo
                 int end = adjacent < indices.Length ? indices[adjacent].StartIndex : items.Length;
                 foreach (object obj in items[start..end])
                 {
-                    T candidate = _Unsafe.As<T>(obj);
-                    if (comparer.Equals(candidate, item))
+                    if (Equals(obj, item))
                     {
                         return this;
                     }
@@ -482,27 +482,31 @@ public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCo
         }
     }
 
-    /// <inheritdoc cref="Remove{T}(T, IEqualityComparer{T})"/>
+    /// <typeparam name="T">The type of the item to remove. Must be a reference type.</typeparam>
+    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="item"/> is <see langword="null"/>.</exception>
+    /// <inheritdoc cref="Remove(object, Type)"/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ImmutableObjectCollection Remove<T>(T item) where T : class
     {
-        return Remove(item, EqualityComparer<T>.Default);
+        return Remove(item, typeof(T));
     }
 
     /// <summary>
     /// Returns a new collection with all instances of the specified item removed from the collection.
     /// </summary>
-    /// <typeparam name="T">The type of the item to remove.</typeparam>
+    /// <param name="type">The type of the item to remove.</param>
     /// <param name="item">The item to remove from the collection.</param>
-    /// <param name="comparer">An object that determines whether two instances of <typeparamref name="T"/> are equal.</param>
     /// <returns>
     /// A new <see cref="ImmutableObjectCollection"/> with the specified item removed; or the current 
     /// collection if the item is not found.
     /// </returns>
-    public ImmutableObjectCollection Remove<T>(T item, IEqualityComparer<T> comparer) where T : class
+    /// <exception cref="ArgumentNullException">
+    /// Thrown if either the <paramref name="item"/> or the <paramref name="type"/> is <see langword="null"/>.
+    /// </exception>
+    public ImmutableObjectCollection Remove(object item, Type type)
     {
         ThrowHelpers.ThrowIfNull(item);
-        ThrowHelpers.ThrowIfNull(comparer);
+        ThrowHelpers.ThrowIfNull(type);
 
         Span<Index> indices = RentedArray.Copy(_itemIndices, out Index[]? indicesArray);
         Span<object> items = RentedArray.Copy(_items, out object[]? itemsArray);
@@ -511,7 +515,7 @@ public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCo
         {
             bool modified = false;
 
-            (int _, int _, ImmutableArray<int> derived) = GlobalTypeRegistry.Get<T>();
+            (int _, int _, ImmutableArray<int> derived) = GlobalTypeRegistry.Get(type);
             int position = indices.Length;
             for (int i = derived.Length - 1; i >= 0; i--)
             {
@@ -533,7 +537,7 @@ public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCo
                 Span<object> cluster = items[start..end];
                 for (int j = cluster.Length - 1; j >= 0; j--)
                 {
-                    if (!comparer.Equals(Cast<T>(cluster[j]), item))
+                    if (!Equals(cluster[j], item))
                     {
                         continue;
                     }
@@ -567,16 +571,16 @@ public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCo
     }
 
     /// <inheritdoc/>
-    public void CopyTo(object[] array, int arrayIndex)
-    {
-        _items.CopyTo(array, arrayIndex);
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public void CopyTo(object[] array, int arrayIndex) => _items.CopyTo(array, arrayIndex);
 
-    /// <summary>
-    /// Creates a new read-only span over the items in this collection.
-    /// </summary>
-    /// <returns>The read-only span representation of this collection.</returns>
+    /// <inheritdoc cref="AsSpan(int, int)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public ReadOnlySpan<object> AsSpan() => _items.AsSpan();
+
+    /// <inheritdoc cref="AsSpan(int, int)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ReadOnlySpan<object> AsSpan(int start) => _items.AsSpan(start, _items.Length - start);
 
     /// <summary>
     /// Creates a new read-only span over the items in this collection.
@@ -587,10 +591,8 @@ public sealed class ImmutableObjectCollection : ICollection<object>, IReadOnlyCo
     public ReadOnlySpan<object> AsSpan(int start, int length) => _items.AsSpan(start, length);
 
     /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
-    public ImmutableArray<object>.Enumerator GetEnumerator()
-    {
-        return _items.GetEnumerator();
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ImmutableArray<object>.Enumerator GetEnumerator() => _items.GetEnumerator();
 
     private static void OffsetIndices(Span<Index> indices, int count)
     {
