@@ -21,7 +21,6 @@ namespace ProceduralGraph;
 /// </summary>
 /// <remarks>Initializes a new instance of the <see cref="Entity"/> class.</remarks>
 /// <param name="logger">The logger instance used for recording diagnostic and operational messages.</param>
-[Serialize]
 public class Entity(ILogger logger) : AsyncLifecycle, IEquatable<Entity>, ICollection<object>
 {
     private readonly struct AsyncDisposalTaskEnumerator(Repository.Query<IAsyncDisposable> query) : IEnumerator<ValueTask>
