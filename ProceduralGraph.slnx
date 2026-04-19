@@ -4,7 +4,9 @@
     <Project Path="Modules/Terrain/Core/Core.csproj" />
     <Project Path="Modules/Terrain/Generic/Generic.csproj" />
   </Folder>
-  <Project Path="Json/Json/Json.csproj" />
-  <Project Path="Json/SourceGenerators/Json.SourceGenerators.csproj" />
+  <Folder Name="/Serialization/">
+    <Project Path="Json/Json/Json.csproj" />
+    <Project Path="Json/SourceGenerators/Json.SourceGenerators.csproj" />
+  </Folder>
   <Project Path="ProceduralGraph/ProceduralGraph.csproj" />
 </Solution>
