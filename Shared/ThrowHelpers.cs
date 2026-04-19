@@ -9,7 +9,7 @@ namespace ProceduralGraph;
 #if NET6_0_OR_GREATER
 [StackTraceHidden]
 #endif
-internal static class ThrowHelpers
+internal static partial class ThrowHelpers
 {
 #if !NET7_0_OR_GREATER
     private const string NonNegativeIntegerMessage = "Must be a non-negative integer.";
@@ -67,6 +67,23 @@ internal static class ThrowHelpers
         if (unchecked((uint)index) >= max)
         {
             ThrowArgumentOutOfRangeException(paramName, index, $"Must be a non-negative integer less than {max}.");
+        }
+    }
+
+    [DebuggerStepThrough, MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static void ThrowIfOutOfRange<T>(int sourceLength, 
+        int arrayIndex, 
+        [NotNull] T[]? array,
+        [CallerArgumentExpression(nameof(arrayIndex))] string? indexParamName = null,
+        [CallerArgumentExpression(nameof(array))] string? arrayParamName = null)
+    {
+        ThrowIfNull(array, arrayParamName);
+        int length = array.Length;
+        ThrowIfOutOfRange(arrayIndex, length, indexParamName);
+        if (sourceLength > length - arrayIndex)
+        {
+            string message = $"The number of elements in the source collection exceeds the available space from {arrayIndex} to the end of the destination array.";
+            ThrowArgumentOutOfRangeException(indexParamName, arrayIndex, message);
         }
     }
 
