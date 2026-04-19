@@ -13,6 +13,9 @@
   <ItemGroup>
     <Compile Include="..\Shared\ThrowHelpers.cs" LinkBase="Shared" />
     <Compile Include="..\Shared\RentedArray.cs" LinkBase="Shared" /> 
+    <Compile Include="..\Shared\SpanExtensions.cs" LinkBase="Shared" /> 
+    <Compile Include="..\Shared\TaskExtensions.cs" LinkBase="Shared" /> 
+    <Compile Include="..\Shared\IntegerLookup.cs" LinkBase="Shared" /> 
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">

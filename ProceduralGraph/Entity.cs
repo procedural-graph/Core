@@ -264,7 +264,7 @@ public class Entity(ILogger logger) : AsyncLifecycle, IEquatable<Entity>, IColle
         try
         {
             AsyncDisposalTaskEnumerator enumerator = new(objects.GetAll<IAsyncDisposable>());
-            await Extensions.CompleteAllAsync(enumerator);
+            await enumerator.CompleteAllAsync();
         }
         catch (Exception ex)
         {

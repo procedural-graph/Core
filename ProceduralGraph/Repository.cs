@@ -75,7 +75,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
         {
             private readonly Type _type;
             private readonly ImmutableArray<object> _items;
-            private readonly ImmutableArray<Index> _indices;
+            private readonly ImmutableArray<IntegerLookup> _indices;
             private ReadOnlyMemory<int> _ids;
             private int _order, _low, _index, _position, _start, _end;
             private ClusterEnumerator _clusterEnumerator;
@@ -117,8 +117,8 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
                         _position = AdvancePosition();
                     }
 
-                    int clusterStart = _indices[_position].StartIndex;
-                    int clusterEnd = ++_position < _indices.Length ? _indices[_position].StartIndex : _items.Length;
+                    int clusterStart = _indices[_position].Index;
+                    int clusterEnd = ++_position < _indices.Length ? _indices[_position].Index : _items.Length;
                     _clusterEnumerator = new ClusterEnumerator(_items, clusterStart, clusterEnd);
                 }
 
@@ -136,7 +136,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
                 (int _, _order, ImmutableArray<int> derived) = GlobalTypeRegistry.Get(_type);
                 _ids = derived.AsMemory();
 
-                ReadOnlySpan<Index> indices = _indices.AsSpan();
+                ReadOnlySpan<IntegerLookup> indices = _indices.AsSpan();
                 _low = indices.IndexOfSorted(derived[_order]);
                 _low = _low >= 0 ? _low : ~_low;
                 _position = _low;
@@ -151,7 +151,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             private readonly int AdvancePosition()
             {
-                ReadOnlySpan<Index> indices = _indices.AsSpan(_start, _end - _start);
+                ReadOnlySpan<IntegerLookup> indices = _indices.AsSpan(_start, _end - _start);
                 return indices.IndexOfSorted(_ids.Span[_index]);
             }
         }
@@ -181,7 +181,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
     /// <inheritdoc cref="IEnumerator{T}"/>
     public struct Enumerator : IEnumerator<KeyValuePair<Type, object>>
     {
-        private readonly ImmutableArray<Index> _indices;
+        private readonly ImmutableArray<IntegerLookup> _indices;
         private readonly ImmutableArray<object> _items;
         private ClusterEnumerator _enumerator;
         private Type[]? _lookup;
@@ -209,13 +209,13 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
                     return false;
                 }
 
-                int start = _indices[_index].StartIndex;
-                int end = ++_index < _indices.Length ? _indices[_index].StartIndex : _items.Length;
+                int start = _indices[_index].Index;
+                int end = ++_index < _indices.Length ? _indices[_index].Index : _items.Length;
                 _enumerator = new ClusterEnumerator(_items, start, end);
             }
 
-            Index entry = _indices[_index];
-            Current = new KeyValuePair<Type, object>(_lookup![entry.TypeID], _enumerator.Current);
+            IntegerLookup entry = _indices[_index];
+            Current = new KeyValuePair<Type, object>(_lookup![entry.Key], _enumerator.Current);
             return true;
         }
 
@@ -239,7 +239,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
         /// <inheritdoc cref="IEnumerator{T}"/>
         public struct Enumerator : IEnumerator<Type>
         {
-            private readonly ImmutableArray<Index> _indices;
+            private readonly ImmutableArray<IntegerLookup> _indices;
             private Type[]? _lookup;
             private int _index;
 
@@ -263,8 +263,8 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
                     return false;
                 }
 
-                Index entry = _indices[_index];
-                Current = _lookup![entry.TypeID];
+                IntegerLookup entry = _indices[_index];
+                Current = _lookup![entry.Key];
 
                 return true;
             }
@@ -329,37 +329,9 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
         public void Reset() => _index = _start - 1;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private readonly record struct Index(int TypeID, int StartIndex) : IComparable, IComparable<int>, IComparable<Index>
-    {
-        public int CompareTo(object? obj) => obj is Index other ? CompareTo(other) : 1;
-        public int CompareTo(int other) => TypeID.CompareTo(other);
-        public int CompareTo(Index other) => TypeID.CompareTo(other.TypeID);
-    }
-
-    private readonly ImmutableArray<Index> _itemIndices;
+    private readonly ImmutableArray<IntegerLookup> _itemIndices;
 
     private readonly ImmutableArray<object> _items;
-
-#if NETCOREAPP3_0_OR_GREATER
-    private static readonly Vector<int> _altMask;
-
-    static Repository()
-    {
-        if (!Vector.IsHardwareAccelerated)
-        {
-            return;
-        }
-
-        Span<int> mask = stackalloc int[Vector<int>.Count];
-        for (int i = 0; i < mask.Length; i++)
-        {
-            mask[i] = i % 2;
-        }
-
-        _altMask = new Vector<int>(mask);
-    }
-#endif
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Repository"/> class with no items.
@@ -370,7 +342,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
         _itemIndices = [];
     }
 
-    private Repository(ImmutableArray<Index> itemIndices, ImmutableArray<object> items)
+    private Repository(ImmutableArray<IntegerLookup> itemIndices, ImmutableArray<object> items)
     {
         _itemIndices = itemIndices;
         _items = items;
@@ -440,7 +412,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
             return false;
         }
 
-        ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
+        ReadOnlySpan<IntegerLookup> indices = _itemIndices.AsSpan();
         (int _, int order, ImmutableArray<int> derived) = GlobalTypeRegistry.Get(type);
         ReadOnlySpan<int> ids = derived.AsSpan();
 
@@ -460,8 +432,8 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
             }
             else
             {
-                Index entry = indices[start + pos];
-                result = _items[entry.StartIndex];
+                IntegerLookup entry = indices[start + pos];
+                result = _items[entry.Index];
                 return true;
             }
             end = low < 0 ? ~low : low;
@@ -512,7 +484,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
         }
 
         TypeRegistration registration = GlobalTypeRegistry.Get(type ?? item.GetType());
-        ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
+        ReadOnlySpan<IntegerLookup> indices = _itemIndices.AsSpan();
         int index = indices.IndexOfSorted(registration.ID);
 
         if (index < 0)
@@ -520,8 +492,8 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
             return false;
         }
 
-        int start = indices[index].StartIndex;
-        int length = (++index < indices.Length ? indices[index].StartIndex : _items.Length) - start;
+        int start = indices[index].Index;
+        int length = (++index < indices.Length ? indices[index].Index : _items.Length) - start;
         ReadOnlySpan<object> items = _items.AsSpan(start, length);
 
         foreach (object obj in items)
@@ -559,7 +531,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
         }
 
         TypeRegistration registration = GlobalTypeRegistry.Get(type);
-        ReadOnlySpan<Index> indices = _itemIndices.AsSpan();
+        ReadOnlySpan<IntegerLookup> indices = _itemIndices.AsSpan();
 
         return indices.IndexOfSorted(registration.ID) >= 0;
     }
@@ -612,13 +584,13 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
         ThrowHelpers.ThrowIfNull(item);
         ThrowHelpers.ThrowIfNull(type);
 
-        Span<Index> indices = RentedArray.Copy(_itemIndices, out Index[]? indicesArray);
+        Span<IntegerLookup> indices = RentedArray.Copy(_itemIndices, out IntegerLookup[]? indicesArray);
         Span<object> items = RentedArray.Copy(_items, out object[]? itemsArray);
         try
         {
             TypeRegistration registration = GlobalTypeRegistry.Get(type);
             int index = indices.IndexOfSorted(registration.ID), start;
-            Index entry;
+            IntegerLookup entry;
 
             if (index < 0)
             {
@@ -626,15 +598,15 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
                 indices = RentedArray.Grow(ref indicesArray, indices.Length + 1);
                 indices[index..].CopyTo(indices[(index + 1)..]);
                 start = items.Length;
-                entry = new Index(registration.ID, start);
+                entry = new IntegerLookup(registration.ID, start);
                 indices[index] = entry;
             }
             else
             {
                 entry = indices[index];
-                start = entry.StartIndex;
+                start = entry.Index;
                 int adjacent = index + 1;
-                int end = adjacent < indices.Length ? indices[adjacent].StartIndex : items.Length;
+                int end = adjacent < indices.Length ? indices[adjacent].Index : items.Length;
                 foreach (object obj in items[start..end])
                 {
                     if (Equals(obj, item))
@@ -648,7 +620,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
             items[start..^1].CopyTo(items[(start + 1)..]);
             items[start] = item;
 
-            OffsetIndices(indices[index..], 1);
+            IntegerLookup.Offset(indices[index..], 1);
 
             return new Repository([.. indices], [.. items]);
         }
@@ -685,7 +657,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
         ThrowHelpers.ThrowIfNull(item);
         ThrowHelpers.ThrowIfNull(type);
 
-        Span<Index> indices = RentedArray.Copy(_itemIndices, out Index[]? indicesArray);
+        Span<IntegerLookup> indices = RentedArray.Copy(_itemIndices, out IntegerLookup[]? indicesArray);
         Span<object> items = RentedArray.Copy(_items, out object[]? itemsArray);
 
         try
@@ -707,9 +679,9 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
 
                 modified = true;
 
-                Index entry = indices[position];
-                int start = adjacent >= 0 ? indices[adjacent].StartIndex : 0;
-                int end = entry.StartIndex;
+                IntegerLookup entry = indices[position];
+                int start = adjacent >= 0 ? indices[adjacent].Index : 0;
+                int end = entry.Index;
 
                 Span<object> cluster = items[start..end];
                 for (int j = cluster.Length - 1; j >= 0; j--)
@@ -733,7 +705,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
                     indices[position..].CopyTo(indices[adjacent..]);
                     indices = indices[..^1];
                 }
-                OffsetIndices(indices[position..], -remaining);
+                IntegerLookup.Offset(indices[position..], -remaining);
 
                 position = adjacent;
             }
@@ -767,7 +739,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
         int length = values.Length;
         object[] itemArray = new object[length];
         int[]? idArray = RentedArray.Acquire<int>(length);
-        Index[]? indicesArray = null;
+        IntegerLookup[]? indicesArray = null;
         try
         {
             int index = 0;
@@ -781,7 +753,7 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
             }
             Array.Sort(idArray, itemArray, 0, length);
 
-            indicesArray = RentedArray.Acquire<Index>(length);
+            indicesArray = RentedArray.Acquire<IntegerLookup>(length);
             index = 0;
             int currentID = idArray[0], start = 0;
             for (int end = 1; end < length; end++)
@@ -789,14 +761,14 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
                 ref readonly int id = ref idArray[end];
                 if (id != currentID)
                 {
-                    indicesArray[index++] = new Index(currentID, start);
+                    indicesArray[index++] = new IntegerLookup(currentID, start);
                     currentID = id;
                     start = end;
                 }
             }
-            indicesArray[index] = new Index(currentID, start);
+            indicesArray[index] = new IntegerLookup(currentID, start);
 
-            ImmutableArray<Index> itemIndices = ImmutableArray.Create(indicesArray, 0, index + 1);
+            ImmutableArray<IntegerLookup> itemIndices = ImmutableArray.Create(indicesArray, 0, index + 1);
             ImmutableArray<object> items = ImmutableCollectionsMarshal.AsImmutableArray(itemArray);
             return new Repository(itemIndices, items);
         }
@@ -816,29 +788,6 @@ public sealed class Repository : ICollection<KeyValuePair<Type, object>>, IReadO
     {
         Span<KeyValuePair<Type, object>> span = values.AsSpan(start, length);
         return FromRange(span);
-    }
-
-    private static void OffsetIndices(Span<Index> indices, int count)
-    {
-        int index = 0, length = indices.Length;
-
-#if NETCOREAPP3_0_OR_GREATER
-        if (Vector.IsHardwareAccelerated)
-        {
-            int indicesPerVector = Vector<int>.Count / 2;
-            Vector<int> offset = _altMask * count;
-            for (; (length - index) >= indicesPerVector; index += indicesPerVector)
-            {
-                Unsafe.As<Index, Vector<int>>(ref indices[index]) += offset;
-            }
-        }
-#endif
-
-        for (; index < length; index++)
-        {
-            ref Index newEntry = ref indices[index];
-            newEntry = newEntry with { StartIndex = newEntry.StartIndex + count };
-        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
