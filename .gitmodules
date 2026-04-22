@@ -1,6 +1,3 @@
-[submodule "Procedural Graph: Json"]
-	path = "Json"
-	url = https://github.com/procedural-graph/Json.git
 [submodule "Procedural Graph (Flax Engine)"]
 	path = FlaxEngine
 	url = https://github.com/procedural-graph/Core-Flax.git
