@@ -4,16 +4,24 @@ namespace ProceduralGraph.Mathematics;
 
 internal static class Utils
 {
+#if !NET7_0_OR_GREATER
     extension(double)
     {
-#if !NET7_0_OR_GREATER
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static double Clamp(double value, double min, double max)
         {
             return value < min ? min : value > max ? max : value;
         }
-#endif
     }
+    extension(int)
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int Clamp(int value, int min, int max)
+        {
+            return value < min ? min : value > max ? max : value;
+        }
+    }
+#endif
 
     extension(float)
     {
