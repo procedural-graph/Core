@@ -36,40 +36,4 @@
     <PackageReference Include="System.Memory" Version="4.6.*" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Compile Update="Collections\ConcurrentCache.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedArray.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedArrayCache.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedArrayReference.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedArraySource.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedMap.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedMapCache.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedMapReference.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedMapSource.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedMemory.cs">
-      <SubType>Component</SubType>
-    </Compile>
-    <Compile Update="Collections\Unsafe\UnmanagedMemoryCache.cs">
-      <SubType>Component</SubType>
-    </Compile>
-  </ItemGroup>
-
 </Project>
