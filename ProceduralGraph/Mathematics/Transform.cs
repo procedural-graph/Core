@@ -11,6 +11,11 @@ namespace ProceduralGraph.Mathematics;
 public readonly record struct Transform(Vector3 Scale, Quaternion Rotation, Double3 Translation)
 {
     /// <summary>
+    /// Gets the identity transformation, which has a scale of (1, 1, 1), no rotation, and no translation.
+    /// </summary>
+    public static Transform Identity { get; } = new Transform(Vector3.One, Quaternion.Identity, Double3.Zero);
+
+    /// <summary>
     /// Transforms the specified point from local space to world space.
     /// </summary>
     /// <param name="point">The point to transform, represented as a <see cref="Double3"/>.</param>
