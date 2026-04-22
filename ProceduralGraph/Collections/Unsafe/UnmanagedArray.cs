@@ -21,15 +21,15 @@ public abstract class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, IStructu
         {
             ThrowHelpers.ThrowIfDisposed(Disposed, this);
             ThrowHelpers.ThrowIfOutOfRange(index, Length, nameof(index));
-            using SafeHandle.Scope scope = Handle.GetScoped();
-            return *((T*)(void*)scope + index);
+            using SafeHandle.Scope<T> scope = Handle.GetScoped<T>();
+            return *((T*)scope + index);
         }
         set
         {
             ThrowHelpers.ThrowIfDisposed(Disposed, this);
             ThrowHelpers.ThrowIfOutOfRange(index, Length, nameof(index));
-            using SafeHandle.Scope scope = Handle.GetScoped();
-            *((T*)(void*)scope + index) = value;
+            using SafeHandle.Scope<T> scope = Handle.GetScoped<T>();
+            *((T*)scope + index) = value;
         }
     }
 
@@ -46,8 +46,8 @@ public abstract class UnmanagedArray<T> : UnmanagedMemory<T>, IList<T>, IStructu
 
         EqualityComparer<T> equalityComparer = EqualityComparer<T>.Default;
 
-        using SafeHandle.Scope scope = Handle.GetScoped();
-        T* ptr = (T*)(void*)scope;
+        using SafeHandle.Scope<T> scope = Handle.GetScoped<T>();
+        T* ptr = (T*)scope;
 
         for (long i = 0; i < Length; i++)
         {

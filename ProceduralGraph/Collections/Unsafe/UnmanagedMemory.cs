@@ -148,7 +148,7 @@ public abstract unsafe class UnmanagedMemory<T> : Disposable, IBigCollection<T> 
     /// <inheritdoc/>
     public void Clear()
     {
-        using SafeHandle.Scope scope = Handle.GetScoped();
+        using SafeHandle.Scope<T> scope = Handle.GetScoped<T>();
         UnmanagedMarshal.Clear((T*)(void*)scope, Length);
     }
 
@@ -174,7 +174,7 @@ public abstract unsafe class UnmanagedMemory<T> : Disposable, IBigCollection<T> 
         {
             throw new ArgumentException($"The number of elements in the source collection is greater than the available space from {nameof(arrayIndex)} to the end of the destination array.");
         }
-        using SafeHandle.Scope scope = Handle.GetScoped();
+        using SafeHandle.Scope<T> scope = Handle.GetScoped<T>();
         fixed (T* destination = &array[arrayIndex])
         {
             UnmanagedMarshal.Copy((T*)(void*)scope, destination, Length);
@@ -199,7 +199,7 @@ public abstract unsafe class UnmanagedMemory<T> : Disposable, IBigCollection<T> 
     /// </returns>
     protected static SafeHandle Clone(SafeHandle handle, long elementCount)
     {
-        SafeHandle.Scope scope = handle.GetScoped();
+        SafeHandle.Scope<T> scope = handle.GetScoped<T>();
         void* buffer = null;
         long bytesAllocated = 0L;
         try

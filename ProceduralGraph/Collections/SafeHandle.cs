@@ -14,7 +14,7 @@ public sealed class SafeHandle : System.Runtime.InteropServices.SafeHandle, IEqu
     /// <summary>
     /// Represents a scope that manages a native resource.
     /// </summary>
-    public ref struct Scope : IDisposable
+    public ref struct Scope<T> : IDisposable where T : unmanaged
     {
         private SafeHandle? _handle;
 
@@ -32,34 +32,31 @@ public sealed class SafeHandle : System.Runtime.InteropServices.SafeHandle, IEqu
             }
         }
 
-        private static IntPtr GetHandle(Scope value)
+        private static IntPtr GetHandle(Scope<T> value)
         {
-#if NET7_0_OR_GREATER
-            ObjectDisposedException.ThrowIf(value._handle is null, value);
-#else
             if (value._handle is null)
             {
-                throw new ObjectDisposedException(nameof(Scope));
+                throw new ObjectDisposedException(nameof(Scope<>));
             }
-#endif
+
             return value._handle.DangerousGetHandle();
         }
 
         /// <summary>
-        /// Implicitly converts a <see cref="Scope"/> instance to an <see cref="IntPtr"/> 
+        /// Implicitly converts a <see cref="Scope{T}"/> instance to an <see cref="IntPtr"/> 
         /// that represents a handle to the underlying resource.
         /// </summary>
         /// <param name="value">The Scope instance to convert to an <see cref="IntPtr"/>.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static implicit operator IntPtr(Scope value) => GetHandle(value);
+        public static implicit operator IntPtr(Scope<T> value) => GetHandle(value);
 
         /// <summary>
-        /// Implicitly converts a <see cref="Scope"/> instance to a pointer of type <see cref="void"/> 
+        /// Implicitly converts a <see cref="Scope{T}"/> instance to a pointer of type <see cref="void"/> 
         /// that represents a handle to the underlying resource.
         /// </summary>
         /// <param name="value">The Scope instance to convert to a pointer of type <see cref="void"/>.</param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static unsafe implicit operator void*(Scope value) => (void*)GetHandle(value);
+        public static unsafe implicit operator T*(Scope<T> value) => (T*)GetHandle(value);
     }
 
     /// <summary>
@@ -77,14 +74,14 @@ public sealed class SafeHandle : System.Runtime.InteropServices.SafeHandle, IEqu
     /// <summary>
     /// Creates a scoped context for the current object, ensuring that it remains valid for the duration of the scope.
     /// </summary>
-    /// <returns>A new instance of the <see cref="Scope"/> class that represents the scoped context of the current object.</returns>
+    /// <returns>A new instance of the <see cref="Scope{T}"/> class that represents the scoped context of the current object.</returns>
     /// <exception cref="ObjectDisposedException">Thrown if the current object has already been disposed.</exception>
-    public Scope GetScoped()
+    public Scope<T> GetScoped<T>() where T : unmanaged
     {
         bool success = false;
         DangerousAddRef(ref success);
         ThrowHelpers.ThrowIfDisposed(!success, this);
-        return new Scope(this);
+        return new Scope<T>(this);
     }
 
     /// <inheritdoc/>

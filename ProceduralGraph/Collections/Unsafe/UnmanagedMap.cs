@@ -31,7 +31,7 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
             ThrowHelpers.ThrowIfDisposed(Disposed, this);
             ThrowHelpers.ThrowIfOutOfRange(x, Width);
             ThrowHelpers.ThrowIfOutOfRange(y, Height);
-            using SafeHandle.Scope scope = Handle.GetScoped();
+            using SafeHandle.Scope<TValue> scope = Handle.GetScoped<TValue>();
             return *((TValue*)(void*)scope + (y * Width + x));
         }
         set
@@ -39,7 +39,7 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
             ThrowHelpers.ThrowIfDisposed(Disposed, this);
             ThrowHelpers.ThrowIfOutOfRange(x, Width);
             ThrowHelpers.ThrowIfOutOfRange(y, Height);
-            using SafeHandle.Scope scope = Handle.GetScoped();
+            using SafeHandle.Scope<TValue> scope = Handle.GetScoped<TValue>();
             *((TValue*)(void*)scope + (y * Width + x)) = value;
         }
     }
@@ -49,7 +49,7 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
     {
         ThrowHelpers.ThrowIfDisposed(Disposed, this);
         EqualityComparer<TValue> equalityComparer = EqualityComparer<TValue>.Default;
-        using SafeHandle.Scope scope = Handle.GetScoped();
+        using SafeHandle.Scope<TValue> scope = Handle.GetScoped<TValue>();
         return UnmanagedMarshal.IndexOf((TValue*)(void*)scope, Length, item, equalityComparer) != -1L;
     }
 
@@ -61,7 +61,7 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         long height = Height, width = Width;
-        using SafeHandle.Scope scope = Handle.GetScoped();
+        using SafeHandle.Scope<TValue> scope = Handle.GetScoped<TValue>();
         IntPtr rawSourcePtr = scope;
 
         Parallel.For(0L, height, y =>
@@ -84,10 +84,10 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         ThrowHelpers.ThrowIfOutOfRange(Height, destination.Height);
 
         long height = Height, width = Width;
-        using SafeHandle.Scope sourceScope = Handle.GetScoped();
+        using SafeHandle.Scope<TValue> sourceScope = Handle.GetScoped<TValue>();
         IntPtr rawSourcePtr = sourceScope;
 
-        using SafeHandle.Scope destinationScope = destination.Handle.GetScoped();
+        using SafeHandle.Scope<TValue> destinationScope = destination.Handle.GetScoped<TValue>();
         IntPtr rawDestinationPtr = destinationScope;
 
         Parallel.For(0L, height, y =>
@@ -116,13 +116,13 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         ThrowHelpers.ThrowIfNotEqual(destination.Width, width);
         ThrowHelpers.ThrowIfNotEqual(destination.Height, height);
 
-        using SafeHandle.Scope source1Handle = Handle.GetScoped();
+        using SafeHandle.Scope<TValue> source1Handle = Handle.GetScoped<TValue>();
         IntPtr rawSource1Ptr = source1Handle;
 
-        using SafeHandle.Scope source2Handle = source.Handle.GetScoped();
+        using SafeHandle.Scope<TValue> source2Handle = source.Handle.GetScoped<TValue>();
         IntPtr rawSource2Ptr = source2Handle;
 
-        using SafeHandle.Scope destinationHandle = destination.Handle.GetScoped();
+        using SafeHandle.Scope<TValue> destinationHandle = destination.Handle.GetScoped<TValue>();
         IntPtr rawDestinationPtr = destinationHandle;
 
         Parallel.For(0L, height, y =>
@@ -142,7 +142,7 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         ThrowHelpers.ThrowIfDisposed(Disposed, this);
 
         long height = Height, width = Width;
-        using SafeHandle.Scope scope = Handle.GetScoped();
+        using SafeHandle.Scope<TValue> scope = Handle.GetScoped<TValue>();
         IntPtr rawSourcePtr = scope;
 
         Parallel.For(0L, width, x =>
@@ -165,10 +165,10 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         ThrowHelpers.ThrowIfNotEqual(Height, destination.Height);
 
         long height = Height, width = Width;
-        using SafeHandle.Scope sourceScope = Handle.GetScoped();
+        using SafeHandle.Scope<TValue> sourceScope = Handle.GetScoped<TValue>();
         IntPtr rawSourcePtr = sourceScope;
 
-        using SafeHandle.Scope destinationScope = destination.Handle.GetScoped();
+        using SafeHandle.Scope<TResult> destinationScope = destination.Handle.GetScoped<TResult>();
         IntPtr rawDestinationPtr = destinationScope;
 
         Parallel.For(0L, width, x =>
@@ -197,13 +197,13 @@ public abstract class UnmanagedMap<TValue> : UnmanagedMemory<TValue>, IBigCollec
         ThrowHelpers.ThrowIfNotEqual(destination.Width, width);
         ThrowHelpers.ThrowIfNotEqual(destination.Height, height);
 
-        using SafeHandle.Scope source1Handle = Handle.GetScoped();
+        using SafeHandle.Scope<TValue> source1Handle = Handle.GetScoped<TValue>();
         IntPtr rawSource1Ptr = source1Handle;
 
-        using SafeHandle.Scope source2Handle = source.Handle.GetScoped();
+        using SafeHandle.Scope<TSource> source2Handle = source.Handle.GetScoped<TSource>();
         IntPtr rawSource2Ptr = source2Handle;
 
-        using SafeHandle.Scope destinationHandle = destination.Handle.GetScoped();
+        using SafeHandle.Scope<TResult> destinationHandle = destination.Handle.GetScoped<TResult>();
         IntPtr rawDestinationPtr = destinationHandle;
 
         Parallel.For(0L, width, x =>
