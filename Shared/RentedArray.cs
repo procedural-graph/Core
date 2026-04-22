@@ -69,10 +69,10 @@ internal static class RentedArray
     public static void Return<T>([DisallowNull, MaybeNull] ref T[]? array)
     {
         ThrowHelpers.ThrowIfNull(array);
-#if NETFRAMEWORK
-        bool clearArray = true;
-#else
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_0_OR_GREATER
         bool clearArray = RuntimeHelpers.IsReferenceOrContainsReferences<T>();
+#else
+        bool clearArray = true;
 #endif
         ArrayPool<T>.Shared.Return(array, clearArray);
         array = null;
