@@ -66,6 +66,16 @@ public readonly record struct BoundingBox
     }
 
     /// <summary>
+    /// Determines whether this bounding box overlaps with the specified bounding box in the XZ plane, ignoring the Y dimension.
+    /// </summary>
+    /// <inheritdoc cref="Intersects(BoundingBox)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool IntersectsXZ(BoundingBox other)
+    {
+        return Double2.LessThanOrEqualAll(Min.MaskXZ(), other.Max.MaskXZ()) && Double2.GreaterThanOrEqualAll(Max.MaskXZ(), other.Min.MaskXZ());
+    }
+
+    /// <summary>
     /// Creates a bounding box that encapsulates a single Transform.
     /// Assumes the transform represents a 1x1x1 unit cube centered at its origin.
     /// </summary>
