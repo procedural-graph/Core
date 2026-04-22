@@ -11,7 +11,7 @@ using System.Runtime.Intrinsics;
 namespace ProceduralGraph.Mathematics;
 
 /// <summary>
-/// Represents a three-dimensional vector whose components are double-precision floating-point values.
+/// Represents a two-dimensional vector whose components are double-precision floating-point values.
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 public struct Double2 : IVector2<Double2, double>
@@ -102,7 +102,7 @@ public struct Double2 : IVector2<Double2, double>
     }
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="Double2"/> structure with the specified x, y, and z component values.
+    /// Initializes a new instance of the <see cref="Double2"/> structure with the specified x and y component values.
     /// </summary>
     /// <param name="x">The value to assign to the x component.</param>
     /// <param name="y">The value to assign to the y component.</param>
@@ -279,6 +279,78 @@ public struct Double2 : IVector2<Double2, double>
         return absDifference.X <= float.EqualityThreshold && absDifference.Y <= float.EqualityThreshold;
     }
 
+    /// <summary>
+    /// Performs a component-wise comparison between two vectors.
+    /// </summary>
+    /// <param name="left">The value to compare with <paramref name="right"/>.</param>
+    /// <param name="right">The value to compare with <paramref name="left"/>.</param>
+    /// <returns>
+    /// <see langword="true"/> if each component of <paramref name="left"/> is less than 
+    /// the corresponding component of <paramref name="right"/>; otherwise, <see langword="false"/>.
+    /// </returns>
+    public static bool LessThanAll(Double2 left, Double2 right)
+    {
+#if NETCOREAPP3_0_OR_GREATER
+        if (Vector.IsHardwareAccelerated)
+        {
+            return Vector128.LessThanAll(left.AsVector128(), right.AsVector128());
+        }
+
+#endif
+        return left.X < right.X && left.Y < right.Y;
+    }
+
+    /// <returns>
+    /// <see langword="true"/> if each component of <paramref name="left"/> is less than or equal to
+    /// the corresponding component of <paramref name="right"/>; otherwise, <see langword="false"/>.
+    /// </returns>
+    /// <inheritdoc cref="LessThanAll(Double2, Double2)"/>
+    public static bool LessThanOrEqualAll(Double2 left, Double2 right)
+    {
+#if NETCOREAPP3_0_OR_GREATER
+        if (Vector.IsHardwareAccelerated)
+        {
+            return Vector128.LessThanOrEqualAll(left.AsVector128(), right.AsVector128());
+        }
+
+#endif
+        return left.X <= right.X && left.Y <= right.Y;
+    }
+
+    /// <returns>
+    /// <see langword="true"/> if each component of <paramref name="left"/> is greater than 
+    /// the corresponding component of <paramref name="right"/>; otherwise, <see langword="false"/>.
+    /// </returns>
+    /// <inheritdoc cref="LessThanAll(Double2, Double2)"/>
+    public static bool GreaterThanAll(Double2 left, Double2 right)
+    {
+#if NETCOREAPP3_0_OR_GREATER
+        if (Vector.IsHardwareAccelerated)
+        {
+            return Vector128.GreaterThanAll(left.AsVector128(), right.AsVector128());
+        }
+
+#endif
+        return left.X > right.X && left.Y > right.Y;
+    }
+
+    /// <returns>
+    /// <see langword="true"/> if each component of <paramref name="left"/> is greater than or equal to 
+    /// the corresponding component of <paramref name="right"/>; otherwise, <see langword="false"/>.
+    /// </returns>
+    /// <inheritdoc cref="LessThanAll(Double2, Double2)"/>
+    public static bool GreaterThanOrEqualAll(Double2 left, Double2 right)
+    {
+#if NETCOREAPP3_0_OR_GREATER
+        if (Vector.IsHardwareAccelerated)
+        {
+            return Vector128.GreaterThanOrEqualAll(left.AsVector128(), right.AsVector128());
+        }
+
+#endif
+        return left.X >= right.X && left.Y >= right.Y;
+    }
+
 #if NETCOREAPP3_0_OR_GREATER
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private readonly Vector128<double> AsVector128()
@@ -324,7 +396,7 @@ public struct Double2 : IVector2<Double2, double>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Double2 operator +(Double2 left, double right)
     {
-        Double2 operand = Create(right);
+        Double2 operand = new(right);
         return left + operand;
     }
 

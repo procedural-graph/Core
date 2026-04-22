@@ -39,14 +39,29 @@ public struct Double3 : IVector3<Double3, double>
     /// <inheritdoc/>
     public static Double3 MinValue { get; } = Create(double.MinValue);
 
+    private double _x;
     /// <inheritdoc/>
-    public double X { readonly get; set; }
+    public double X
+    {
+        readonly get => _x;
+        set => _x = value;
+    }
 
+    private double _y;
     /// <inheritdoc/>
-    public double Y { readonly get; set; }
+    public double Y
+    {
+        readonly get => _y;
+        set => _y = value;
+    }
 
+    private double _z;
     /// <inheritdoc/>
-    public double Z { readonly get; set; }
+    public double Z
+    {
+        readonly get => _z;
+        set => _z = value;
+    }
 
     /// <inheritdoc/>
     public readonly double LengthSquared
@@ -535,6 +550,33 @@ public struct Double3 : IVector3<Double3, double>
             && absDifference.Y <= float.EqualityThreshold
             && absDifference.Z <= float.EqualityThreshold;
     }
+
+    /// <summary>
+    /// Creates a new <see cref="Double2"/> containing the x and y components of this vector.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="Double2"/> with components corresponding to the <see cref="X"/> and <see cref="Y"/> 
+    /// components of this vector.
+    /// </returns>
+    public readonly Double2 MaskXY() => Unsafe.As<double, Double2>(ref Unsafe.AsRef(in _x));
+
+    /// <summary>
+    /// Creates a new <see cref="Double2"/> containing the x and z components of this vector.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="Double2"/> with components corresponding to the <see cref="X"/> and <see cref="Z"/> 
+    /// components of this vector.
+    /// </returns>
+    public readonly Double2 MaskXZ() => new(X, Z);
+
+    /// <summary>
+    /// Creates a new <see cref="Double2"/> containing the y and z components of this vector.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="Double2"/> with components corresponding to the <see cref="Y"/> and <see cref="Z"/> 
+    /// components of this vector.
+    /// </returns>
+    public readonly Double2 MaskYZ() => Unsafe.As<double, Double2>(ref Unsafe.AsRef(in _y));
 
     /// <summary>
     /// Explicitly converts a <see cref="Vector3"/> to a <see cref="Double3"/> by 
