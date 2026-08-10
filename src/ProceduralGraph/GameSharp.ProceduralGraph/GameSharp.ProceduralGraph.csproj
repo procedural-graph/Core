@@ -8,8 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\GameSharp.Events\GameSharp.Events.csproj" />
-    <ProjectReference Include="..\GameSharp.Sandbox.Client\GameSharp.Sandbox.Client.csproj" />
+    <ProjectReference Include="..\..\GameSharp.Events\GameSharp.Events.csproj" />
+    <ProjectReference Include="..\..\GameSharp.Sandbox.Client\GameSharp.Sandbox.Client.csproj" />
   </ItemGroup>
 
 </Project>

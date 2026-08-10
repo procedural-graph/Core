@@ -1,9 +1,9 @@
 [submodule "Procedural Graph (Flax Engine)"]
-	path = FlaxEngine
+	path = src\ProceduralGraph\FlaxEngine
 	url = https://github.com/procedural-graph/Core-Flax.git
 [submodule "Procedural Graph (Unity Engine)"]
-	path = UnityEngine
+	path = src\ProceduralGraph\UnityEngine
 	url = https://github.com/procedural-graph/Core-Unity.git
 [submodule "Procedural Graph: Terrain"]
-	path = "Modules/Terrain"
+	path = src\ProceduralGraph\Modules\Terrain
 	url = https://github.com/procedural-graph/Terrain.git
