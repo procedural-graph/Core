@@ -8,6 +8,18 @@
     <IsAotCompatible>true</IsAotCompatible>
     <VerifyReferenceAotCompatibility>true</VerifyReferenceAotCompatibility>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Authors>willbldn</Authors>
+    <Description>
+      An aggressively optimized, Native AOT-compatible collection library. Designed for game engines, ECS architectures, 
+      and high-performance systems, GameSharp.Collections provides hardware-accelerated (SIMD) and CPU L1 cache-aware object retrieval by type.
+    </Description>
+    <Copyright>Copyright © 2026 William Brocklesby</Copyright>
+    <PackageTags>collections;game-development;ecs;performance;aot;native-aot;simd;cache-friendly;type-lookup;dotnet10;csharp;high-performance</PackageTags>
+    <PackageProjectUrl>https://github.com/gamesharp/Core/tree/master/src/GameSharp.Collections</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/gamesharp/Core.git</RepositoryUrl>
+    <PackageVersion>1.0.0</PackageVersion>
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
   </PropertyGroup>
 
   <ItemGroup>
@@ -15,6 +27,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <None Include ="..\..\LICENSE.md" Pack="true" PackagePath="" />
   </ItemGroup>
 
 </Project>
