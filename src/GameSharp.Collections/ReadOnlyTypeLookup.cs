@@ -1,0 +1,641 @@
+﻿using System.Collections;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
+namespace GameSharp.Collections;
+
+/// <summary>
+/// Represents a read-only view over a collection of objects, providing efficient lookup and retrieval by object type.
+/// </summary>
+/// <inheritdoc/>
+public abstract class ReadOnlyTypeLookup : TypeRegistry, ICollection<KeyValuePair<Type, object>>
+{
+    internal interface IArrayBuilder<T>
+    {
+        T[] Array { get; }
+
+        int LogicalCount { get; set; }
+
+        void Mutate();
+    }
+
+    internal readonly ref struct TypeCluster
+    {
+        public int Index { get; init; }
+
+        public IntegerLookup Lookup { get; init; }
+
+        public ReadOnlySpan<object> Items { get; init; }
+    }
+
+    [StructLayout(LayoutKind.Explicit, Size = 8)] // Do not change
+    internal struct IntegerLookup(int key, int index) : IComparable<int>
+    {
+        private static readonly int _structsPerVector;
+        private static readonly Vector<int> _altMask;
+
+        [FieldOffset(0)]
+        public int key = key;
+
+        [FieldOffset(4)]
+        public int index = index;
+
+        static IntegerLookup()
+        {
+            if (!Vector.IsHardwareAccelerated)
+            {
+                return;
+            }
+
+            _structsPerVector = Vector<int>.Count / 2;
+
+            Span<int> mask = stackalloc int[Vector<int>.Count];
+            ref int maskDataRef = ref MemoryMarshal.GetReference(mask);
+            for (int i = 0; i < mask.Length; i++)
+            {
+                Unsafe.Add(ref maskDataRef, i) = i % 2;
+            }
+
+            _altMask = new Vector<int>(mask);
+        }
+
+        public static void Offset(Span<IntegerLookup> values, int count)
+        {
+            ref IntegerLookup currLookup = ref MemoryMarshal.GetReference(values);
+            ref IntegerLookup endLookup = ref Unsafe.Add(ref currLookup, values.Length);
+
+            if (Vector.IsHardwareAccelerated)
+            {
+                (int quotient, int remainder) = Math.DivRem(values.Length, _structsPerVector);
+
+                if (quotient > 0)
+                {
+                    Vector<int> offset = _altMask * count;
+
+                    ref int currInt = ref Unsafe.As<IntegerLookup, int>(ref currLookup);
+                    ref int endInt = ref Unsafe.Add(ref currInt, quotient * Vector<int>.Count);
+
+                    for (; Unsafe.IsAddressLessThan(ref currInt, ref endInt); currInt = ref Unsafe.Add(ref currInt, Vector<int>.Count))
+                    {
+                        Vector<int> vector = Vector.LoadUnsafe(ref currInt) + offset;
+                        vector.StoreUnsafe(ref currInt);
+                    }
+
+                    currLookup = ref Unsafe.Add(ref currLookup, values.Length - remainder);
+                }
+            }
+
+            for (; Unsafe.IsAddressLessThan(ref currLookup, ref endLookup); currLookup = ref Unsafe.Add(ref currLookup, 1))
+            {
+                currLookup.index += count;
+            }
+        }
+
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public static int ElementOffset(int byteOffset) => byteOffset >> 3;
+
+        public readonly int CompareTo(int other)
+        {
+            return key.CompareTo(other);
+        }
+    }
+
+    /// <inheritdoc cref="IEnumerator{T}"/>
+    public ref struct Enumerator
+    {
+        private readonly ReadOnlySpan<object> _items;
+        private readonly ref IntegerLookup _last;
+        private ref IntegerLookup _current;
+        private ReadOnlySpan<object>.Enumerator _enumerator;
+        private Type? _type;
+
+        /// <inheritdoc cref="IEnumerator{T}.Current"/>
+        public readonly KeyValuePair<Type, object> Current => new(_type!, _enumerator.Current);
+
+        internal Enumerator(ReadOnlySpan<IntegerLookup> lookups, ReadOnlySpan<object> items)
+        {
+            _current = ref MemoryMarshal.GetReference(lookups);
+            _last = ref Unsafe.Add(ref _current, lookups.Length - 1);
+            _items = items;
+        }
+
+        /// <inheritdoc cref="IEnumerator.MoveNext()"/>
+        public bool MoveNext()
+        {
+            while (!_enumerator.MoveNext())
+            {
+                if (Unsafe.IsAddressGreaterThan(in _current, in _last))
+                {
+                    return false;
+                }
+
+                ref IntegerLookup nextRef = ref Unsafe.Add(ref _current, 1);
+                _type = GetTypeInfo(_current.key).Type;
+                if (Unsafe.AreSame(in _current, in _last))
+                {
+                    _enumerator = _items[_current.index..].GetEnumerator();
+                }
+                else
+                {
+                    _enumerator = _items[_current.index..nextRef.index].GetEnumerator();
+                }
+                _current = ref nextRef;
+            }
+
+            return true;
+        }
+    }
+
+    /// <inheritdoc cref="IEnumerator{T}"/>
+    protected class EnumeratorImpl : IEnumerator<KeyValuePair<Type, object>>
+    {
+        private readonly ReadOnlyMemory<object> _items;
+        private readonly ReadOnlyMemory<IntegerLookup> _lookups;
+        private readonly int _lastIndex;
+        private IEnumerator<object> _enumerator;
+        private int _index;
+        private Type? _type;
+
+        /// <inheritdoc/>
+        public KeyValuePair<Type, object> Current => new(_type!, _enumerator.Current);
+        object IEnumerator.Current => Current;
+
+        internal EnumeratorImpl(ReadOnlyMemory<IntegerLookup> lookups, ReadOnlyMemory<object> items)
+        {
+            _items = items;
+            _lookups = lookups;
+            _lastIndex = lookups.Length - 1;
+            IEnumerable<object> empty = [];
+            _enumerator = empty.GetEnumerator();
+        }
+
+        /// <inheritdoc/>
+        public virtual bool MoveNext()
+        {
+            while (!_enumerator.MoveNext())
+            {
+                if (_index > _lastIndex)
+                {
+                    return false;
+                }
+
+                ReadOnlySpan<IntegerLookup> lookups = _lookups.Span;
+                IntegerLookup lookup = lookups[_index];
+                int nextIndex = _index + 1;
+                _type = GetTypeInfo(lookup.key).Type;
+                if (nextIndex > _lastIndex)
+                {
+                    IEnumerable<object> cluster = MemoryMarshal.ToEnumerable(_items[lookup.index..]);
+                    _enumerator = cluster.GetEnumerator();
+                }
+                else
+                {
+                    IEnumerable<object> cluster = MemoryMarshal.ToEnumerable(_items[lookup.index..lookups[nextIndex].index]);
+                    _enumerator = cluster.GetEnumerator();
+                }
+                _index = nextIndex;
+            }
+
+            return true;
+        }
+
+        void IDisposable.Dispose() { }
+
+        void IEnumerator.Reset() => MemberIsNotSupported(this);
+    }
+
+    /// <inheritdoc cref="Query{T}"/>
+    public readonly struct Query
+    {
+        /// <inheritdoc cref="IEnumerator{T}"/>
+        public ref struct Enumerator
+        {
+            private readonly ReadOnlySpan<object> _allItems;
+            private readonly ReadOnlySpan<IntegerLookup> _allLookups;
+            private readonly int _low;
+            private ReadOnlySpan<IntegerLookup> _lookups;
+            private ReadOnlySpan<int> _ids;
+            private int _pivot, _index, _itemsEnd;
+            private ReadOnlySpan<object>.Enumerator _itemEnumerator;
+
+            internal Enumerator(ITypeInfo typeInfo, ReadOnlySpan<IntegerLookup> lookups, ReadOnlySpan<object> items)
+            {
+                _ids = typeInfo.DerivedTypeIDs.AsSpan();
+                if (!TryGetIndexOf(_ids, typeInfo.ID, out _pivot))
+                {
+                    TypeIDWasNotPresentInDerived(typeInfo);
+                }
+                _index = _pivot + 1;
+                _itemsEnd = items.Length;
+
+                _allLookups = lookups;
+                if (TypeLookup.TryGetCluster(lookups, items, typeInfo.ID, out TypeCluster cluster))
+                {
+                    _itemEnumerator = cluster.Items.GetEnumerator();
+                    _low = cluster.Index;
+                    _lookups = _allLookups[_low..];
+                }
+                else
+                {
+                    _low = cluster.Index;
+                    _lookups = _allLookups[_low..];
+                }
+
+                _allItems = items;
+            }
+
+            /// <inheritdoc/>
+            public readonly object Current => _itemEnumerator.Current;
+
+            /// <inheritdoc/>
+            public bool MoveNext()
+            {
+                if (_itemEnumerator.MoveNext() || TryLocateNextCluster())
+                {
+                    return true;
+                }
+
+                if (_pivot == 0)
+                {
+                    return false;
+                }
+
+                _lookups = _allLookups[.._low];
+                _ids = _ids[.._pivot];
+                _itemsEnd = _low < _allLookups.Length ? _allLookups[_low].index : _allItems.Length;
+                _pivot = 0;
+                _index = 0;
+
+                return TryLocateNextCluster();
+            }
+
+            private bool TryLocateNextCluster()
+            {
+                ReadOnlySpan<object> items = _allItems[.._itemsEnd];
+                for (TypeCluster cluster; _index < _ids.Length; _lookups = _lookups[cluster.Index..], _index++)
+                {
+                    if (!TypeLookup.TryGetCluster(_lookups, items, _ids[_index], out cluster))
+                    {
+                        continue;
+                    }
+
+                    _itemEnumerator = cluster.Items.GetEnumerator();
+
+                    if (_itemEnumerator.MoveNext())
+                    {
+                        _lookups = _lookups[cluster.Index..];
+                        _index++;
+
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+
+        private readonly ReadOnlyTypeLookup _typeLookup;
+        private readonly ITypeInfo _typeInfo;
+
+        internal Query(ReadOnlyTypeLookup typeLookup, ITypeInfo typeInfo)
+        {
+            _typeLookup = typeLookup;
+            _typeInfo = typeInfo;
+        }
+
+        /// <inheritdoc cref="IEnumerable{T}.GetEnumerator()"/>
+        public Enumerator GetEnumerator()
+        {
+            return new Enumerator(_typeInfo, _typeLookup.Lookups.Span, _typeLookup.Items.Span);
+        }
+    }
+
+    /// <summary>
+    /// Represents a filtered query over a collection of objects.
+    /// </summary>
+    /// <typeparam name="T">The type of objects to filter by.</typeparam>
+    public readonly struct Query<T> where T : class
+    {
+        /// <inheritdoc cref="IEnumerator{T}"/>
+        public ref struct Enumerator
+        {
+            private Query.Enumerator _enumerator;
+
+            /// <inheritdoc cref="IEnumerator{T}.Current"/>
+            public readonly T Current => Cast<T>(_enumerator.Current);
+
+            internal Enumerator(ITypeInfo typeInfo, ReadOnlySpan<IntegerLookup> lookups, ReadOnlySpan<object> items)
+            {
+                _enumerator = new Query.Enumerator(typeInfo, lookups, items);
+            }
+
+            /// <inheritdoc cref="IEnumerator.MoveNext()"/>
+            public bool MoveNext() => _enumerator.MoveNext();
+        }
+
+        private readonly ReadOnlyTypeLookup _typeLookup;
+        private readonly ITypeInfo _typeInfo;
+
+        internal Query(ReadOnlyTypeLookup typeLookup, ITypeInfo typeInfo)
+        {
+            _typeLookup = typeLookup;
+            _typeInfo = typeInfo;
+        }
+
+        /// <inheritdoc cref="IEnumerable{T}.GetEnumerator()"/>
+        public Enumerator GetEnumerator()
+        {
+            return new Enumerator(_typeInfo, _typeLookup.Lookups.Span, _typeLookup.Items.Span);
+        }
+    }
+
+    private protected const string RequiresDynamicCodeMessage = "This method uses runtime type information which may require dynamic code generation.";
+
+    internal abstract ReadOnlyMemory<IntegerLookup> Lookups { get; }
+    internal abstract ReadOnlyMemory<object> Items { get; }
+
+    /// <inheritdoc/>
+    public int Count => Items.Length;
+
+    bool ICollection<KeyValuePair<Type, object>>.IsReadOnly => true;
+
+    /// <param name="type">The type of items to retrieve.</param>
+    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="type"/> is <see langword="null"/>.</exception>
+    /// <inheritdoc cref="GetAll{T}()"/>
+    [RequiresDynamicCode(RequiresDynamicCodeMessage)]
+    public Query GetAll(Type type)
+    {
+        ITypeInfo typeInfo = GetTypeInfo(type);
+        return new Query(this, typeInfo);
+    }
+
+    /// <summary>
+    /// Retrieves all items of the specified type from the collection.
+    /// </summary>
+    /// <typeparam name="T">The type of items to retrieve from the collection.</typeparam>
+    /// <returns>
+    /// An enumerable sequence containing all contiguous items of the specified type found in the 
+    /// collection; or an empty sequence if no such items are present.
+    /// </returns>
+    public Query<T> GetAll<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T>() where T : class
+    {
+        ITypeInfo typeInfo = GetTypeInfo<T>();
+        return new Query<T>(this, typeInfo);
+    }
+
+    /// <summary>
+    /// Retrieves the first object of the specified type from the collection.
+    /// </summary>
+    /// <returns>The first object of the specified type found in the collection.</returns>
+    /// <exception cref="KeyNotFoundException">Thrown if no object of the specified type is found.</exception>
+    /// <inheritdoc cref="TryGetOne{T}(out T)"/>
+    public T GetOne<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T>() where T : class
+    {
+        if (!TryGetOne(out T? result))
+        {
+            ItemNotPresent();
+        }
+
+        return result;
+    }
+
+    /// <typeparam name="T">The type of object to retrieve. Must be a reference type.</typeparam>
+    /// <inheritdoc cref="TryGetOne(Type, out object)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool TryGetOne<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T>([NotNullWhen(true)] out T? result) where T : class
+    {
+        ITypeInfo typeInfo = GetTypeInfo<T>();
+        if (TryGetOne(typeInfo, out object? item))
+        {
+            result = Cast<T>(item);
+            return true;
+        }
+
+        result = null;
+        return false;
+    }
+
+    /// <summary>
+    /// Retrieves the first object of the specified type from the collection.
+    /// </summary>
+    /// <returns>The first object of the specified type found in the collection.</returns>
+    /// <inheritdoc cref="TryGetOne(Type, out object)"/>
+    /// <exception cref="ArgumentException">Thrown if no object of the specified type is found.</exception>
+    /// <exception cref="ArgumentNullException">Thrown if the <paramref name="type"/> is <see langword="null"/>.</exception>
+    public object GetOne(Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        if (TryGetTypeInfo(type, out ITypeInfo? typeInfo) && TryGetOne(typeInfo, out object? item))
+        {
+            return item;
+        }
+
+        ItemNotPresent(nameof(type));
+        return null;
+    }
+
+    /// <summary>
+    /// Attempts to retrieve the first object of the specified type from the collection.
+    /// </summary>
+    /// <param name="type">The type of object to retrieve.</param>
+    /// <param name="item">
+    /// When this method returns, contains the first instance of the specified type if one is found; otherwise, 
+    /// <see langword="null"/>.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> if an object of the specified type was found and assigned to <paramref name="item"/>; 
+    /// otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool TryGetOne([NotNullWhen(true)] Type? type, [NotNullWhen(true)] out object? item)
+    {
+        if (type is { } && TryGetTypeInfo(type, out ITypeInfo? typeInfo))
+        {
+            return TryGetOne(typeInfo, out item);
+        }
+
+        item = null;
+        return false;
+    }
+
+    /// <typeparam name="T">The type of object to check for. Must be a reference type.</typeparam>
+    /// <inheritdoc cref="Contains(object, Type)"/>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public bool Contains<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T>(T item) where T : class
+    {
+        ITypeInfo typeInfo = GetTypeInfo<T>();
+        return Contains(item, typeInfo);
+    }
+
+    /// <summary>
+    /// Determines whether the collection contains the specified item of the given type.
+    /// </summary>
+    /// <param name="item">The object to locate in the collection.</param>
+    /// <param name="type">The type to use when searching for the item.</param>
+    /// <returns>
+    /// <see langword="true"/> if the item is found in the collection for the specified type; 
+    /// otherwise, <see langword="false"/>.
+    /// </returns>
+    public bool Contains(object item, Type type)
+    {
+        if (TryGetTypeInfo(type, out ITypeInfo? typeInfo))
+        {
+            return Contains(item, typeInfo);
+        }
+
+        return false;
+    }
+
+    /// <inheritdoc cref="IEnumerable{T}.GetEnumerator()"/>
+    public Enumerator GetEnumerator() => new(Lookups.Span, Items.Span);
+
+    private bool TryGetOne(ITypeInfo typeInfo, [NotNullWhen(true)] out object? item)
+    {
+        ReadOnlySpan<IntegerLookup> lookups = Lookups.Span;
+        ReadOnlySpan<int> derived = typeInfo.DerivedTypeIDs.AsSpan();
+        ReadOnlySpan<object> items = Items.Span;
+
+        TryGetIndexOf(derived, typeInfo.ID, out int pivot);
+
+        if (pivot == 0)
+        {
+            return TryGetOne(derived, lookups, items, out item);
+        }
+
+        ref IntegerLookup lookup = ref lookups.HybridSearch(typeInfo.ID, out int byteOffset, out bool exists);
+        if (exists)
+        {
+            item = items[lookup.index];
+            return true;
+        }
+
+        int elementOffset = IntegerLookup.ElementOffset(byteOffset);
+        if (TryGetOne(derived[pivot..], lookups[elementOffset..], items, out item) || TryGetOne(derived[..pivot], lookups[..elementOffset], items, out item))
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryGetOne(ReadOnlySpan<int> ids, ReadOnlySpan<IntegerLookup> lookups, ReadOnlySpan<object> items, [NotNullWhen(true)] out object? item)
+    {
+        foreach (int id in ids)
+        {
+            if (lookups.IsEmpty)
+            {
+                break;
+            }
+
+            ref IntegerLookup lookup = ref lookups.HybridSearch(id, out int byteOffset, out bool exists);
+            if (exists)
+            {
+                item = items[lookup.index];
+                return true;
+            }
+
+            lookups = lookups[IntegerLookup.ElementOffset(byteOffset)..];
+        }
+
+        item = null;
+        return false;
+    }
+
+    private bool Contains(object item, ITypeInfo typeInfo)
+    {
+        Query query = new(this, typeInfo);
+
+        foreach (object obj in query)
+        {
+            if (ReferenceEquals(obj, item))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static T Cast<T>(object obj) where T : class
+    {
+#if DEBUG
+        return (T)obj;
+#else   
+        return Unsafe.As<T>(obj);
+#endif
+    }
+
+    [DoesNotReturn, StackTraceHidden, MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ItemNotPresent(string? paramName = null)
+    {
+        throw new ArgumentException("No items of the specified type were present the collection.", paramName);
+    }
+
+    [DoesNotReturn, StackTraceHidden, MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ArrayIndexIsOutOfRange(object? actualValue, [CallerArgumentExpression(nameof(actualValue))] string? paramName = null)
+    {
+        throw new ArgumentOutOfRangeException(paramName, actualValue,
+            "The number of elements in the source collection is greater than the available space from the specified index to the end of the destination array.");
+    }
+
+    [DoesNotReturn, StackTraceHidden, MethodImpl(MethodImplOptions.NoInlining)]
+    private static void TypeIDWasNotPresentInDerived(ITypeInfo typeInfo)
+    {
+        throw new InvalidOperationException($"The type ID {typeInfo.ID} was not present in the derived type IDs of {typeInfo.Type.FullName}.");
+    }
+
+    [DoesNotReturn, StackTraceHidden, MethodImpl(MethodImplOptions.NoInlining)]
+    private protected static void CollectionIsReadOnly()
+    {
+        throw new NotSupportedException("Cannot modify a read-only collection.");
+    }
+
+    [DoesNotReturn, StackTraceHidden, MethodImpl(MethodImplOptions.NoInlining)]
+    private protected static void MemberIsNotSupported(object instance, [CallerMemberName] string? memberName = null)
+    {
+        throw new NotSupportedException($"{memberName} is not supported on {instance.GetType().FullName}.");
+    }
+
+    IEnumerator<KeyValuePair<Type, object>> IEnumerable<KeyValuePair<Type, object>>.GetEnumerator()
+    {
+        return new EnumeratorImpl(Lookups, Items);
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return new EnumeratorImpl(Lookups, Items);
+    }
+
+    bool ICollection<KeyValuePair<Type, object>>.Contains(KeyValuePair<Type, object> item)
+    {
+        return Contains(item.Value, item.Key);
+    }
+
+    void ICollection<KeyValuePair<Type, object>>.Add(KeyValuePair<Type, object> item) => CollectionIsReadOnly();
+
+    void ICollection<KeyValuePair<Type, object>>.Clear() => CollectionIsReadOnly();
+
+    void ICollection<KeyValuePair<Type, object>>.CopyTo(KeyValuePair<Type, object>[] array, int arrayIndex)
+    {
+        if ((array.Length - (uint)arrayIndex) < Count)
+        {
+            ArrayIndexIsOutOfRange(arrayIndex);
+        }
+        ref KeyValuePair<Type, object> entryRef = ref Unsafe.Add(ref MemoryMarshal.GetArrayDataReference(array), arrayIndex);
+        foreach (KeyValuePair<Type, object> entry in this)
+        {
+            entryRef = entry;
+            entryRef = ref Unsafe.Add(ref entryRef, 1);
+        }
+    }
+
+    bool ICollection<KeyValuePair<Type, object>>.Remove(KeyValuePair<Type, object> item)
+    {
+        CollectionIsReadOnly();
+        return false;
+    }
+}

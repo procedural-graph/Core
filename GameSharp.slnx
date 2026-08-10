@@ -1,0 +1,29 @@
+<Solution>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/GameSharp.Collections.Benchmarks/GameSharp.Collections.Benchmarks.csproj" />
+  </Folder>
+  <Folder Name="/examples/">
+    <Project Path="examples/SandboxEscape.Client/SandboxEscape.Client.csproj" />
+    <Project Path="examples/SandboxEscape/SandboxEscape.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/GameSharp.Collections/GameSharp.Collections.csproj" />
+    <Project Path="src/GameSharp.Events/GameSharp.Events.csproj" />
+    <Project Path="src/GameSharp.ProceduralGraph/GameSharp.ProceduralGraph.csproj" />
+    <Project Path="src/GameSharp.Sandbox.Client/GameSharp.Sandbox.Client.csproj" />
+    <Project Path="src/GameSharp.Sandbox.Host.Dotnet/GameSharp.Sandbox.Host.Dotnet.csproj" />
+    <Project Path="src/GameSharp.Sandbox.Host.Java/GameSharp.Sandbox.Host.Java.csproj" />
+    <Project Path="src/GameSharp.Sandbox.Host/GameSharp.Sandbox.Host.csproj" />
+    <Project Path="src/GameSharp.Sandbox/GameSharp.Sandbox.csproj" />
+    <Project Path="src/GameSharp/GameSharp.csproj" />
+  </Folder>
+  <Folder Name="/src/modules/" />
+  <Folder Name="/src/modules/Terrain/">
+    <Project Path="src/Modules/Terrain/Core/Core.csproj" />
+    <Project Path="src/Modules/Terrain/Generic/Generic.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/GameSharp.Collections.Tests/GameSharp.Collections.Tests.csproj" />
+    <Project Path="tests/GameSharp.Sandbox.Tests/GameSharp.Sandbox.Tests.csproj" />
+  </Folder>
+</Solution>

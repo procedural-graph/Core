@@ -2,5 +2,8 @@
   "explorer.fileNesting.enabled": true,
   "explorer.fileNesting.patterns": {
     "*.cs": "$(capture).*.cs, $(capture).cs.xml"
-  }
+  },
+  "dotrush.roslyn.projectOrSolutionFiles": [
+    "c:\\Users\\willi\\source\\repos\\ProceduralGraph\\ProceduralGraph.slnx"
+  ]
 }
