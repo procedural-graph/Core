@@ -213,11 +213,9 @@ public abstract class ReadOnlyTypeLookup : ICollection<KeyValuePair<Type, object
         /// <inheritdoc cref="IEnumerator{T}"/>
         public ref struct Enumerator
         {
-            private readonly ReadOnlySpan<object> _allItems;
-            private readonly ReadOnlySpan<IntegerLookup> _allLookups;
-            private readonly int _low;
-            private ReadOnlySpan<IntegerLookup> _lookups;
-            private int _itemsEnd, _id;
+            private readonly ReadOnlySpan<object> _items;
+            private readonly ReadOnlySpan<IntegerLookup> _lookups;
+            private int _lookupsStart, _lookupsEnd, _itemsEnd, _id;
             private DerivedTypeCollection.Enumerator _derivedEnumerator;
             private ReadOnlySpan<object>.Enumerator _itemEnumerator;
 
@@ -225,22 +223,10 @@ public abstract class ReadOnlyTypeLookup : ICollection<KeyValuePair<Type, object
             {
                 _derivedEnumerator = typeInfo.Derived.GetEnumerator();
                 _id = _derivedEnumerator.ID;
+                _lookupsEnd = lookups.Length;
                 _itemsEnd = items.Length;
-
-                _allLookups = lookups;
-                if (TypeLookup.TryGetCluster(lookups, items, typeInfo.ID, out TypeCluster cluster))
-                {
-                    _itemEnumerator = cluster.Items.GetEnumerator();
-                    _low = cluster.Index;
-                    _lookups = _allLookups[_low..];
-                }
-                else
-                {
-                    _low = cluster.Index;
-                    _lookups = _allLookups[_low..];
-                }
-
-                _allItems = items;
+                _lookups = lookups;
+                _items = items;
             }
 
             /// <inheritdoc/>
@@ -254,25 +240,23 @@ public abstract class ReadOnlyTypeLookup : ICollection<KeyValuePair<Type, object
                     return true;
                 }
 
-                for (TypeCluster cluster; _derivedEnumerator.MoveNext(); _lookups = _lookups[cluster.Index..])
+                for (TypeCluster cluster; _derivedEnumerator.MoveNext(); _lookupsStart += cluster.Index)
                 {
                     if (_derivedEnumerator.Current < _id)
                     {
-                        _lookups = _allLookups[.._low];
-                        _itemsEnd = _low < _allLookups.Length ? _allLookups[_low].index : _allItems.Length;
+                        _itemsEnd = _lookupsStart < _lookups.Length ? _lookups[_lookupsStart].index : _items.Length;
+                        (_lookupsStart, _lookupsEnd) = (0, _lookupsStart);
                         _id = _derivedEnumerator.Current;
                     }
 
-                    if (!TypeLookup.TryGetCluster(_lookups, _allItems[.._itemsEnd], _derivedEnumerator.Current, out cluster))
+                    if (!TypeLookup.TryGetCluster(_lookups[_lookupsStart.._lookupsEnd], _items[.._itemsEnd], _derivedEnumerator.Current, out cluster))
                     {
                         continue;
                     }
 
                     _itemEnumerator = cluster.Items.GetEnumerator();
-
                     if (_itemEnumerator.MoveNext())
                     {
-                        _lookups = _lookups[cluster.Index..];
                         return true;
                     }
                 }
