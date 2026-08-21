@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -35,6 +36,19 @@ internal struct TypeIdentifier : IEquatable<TypeIdentifier>, IComparable<TypeIde
         get => Unsafe.BitCast<TypeIdentifier, int>(this);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public TypeIdentifier(short assemblyID, int typeID)
+    {
+        AssemblyID = assemblyID;
+
+        if (typeID > 65535)
+        {
+            MaxTypeInstancesReached();
+        }
+
+        TypeID = checked((ushort)typeID);
+    }
+
     public readonly bool Equals(TypeIdentifier other) => CompositeKey == other.CompositeKey;
 
     public readonly int CompareTo(TypeIdentifier other)
@@ -55,6 +69,12 @@ internal struct TypeIdentifier : IEquatable<TypeIdentifier>, IComparable<TypeIde
     public readonly override string ToString()
     {
         return CompositeKey.ToString("X8");
+    }
+
+    [DoesNotReturn, StackTraceHidden, MethodImpl(MethodImplOptions.NoInlining)]
+    private static void MaxTypeInstancesReached()
+    {
+        throw new InvalidOperationException($"The maximum number of types ({short.MaxValue}) has been reached.");
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

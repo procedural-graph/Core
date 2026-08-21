@@ -9,7 +9,7 @@ namespace GameSharp.Collections;
 /// </summary>
 public sealed class TypeInfo
 {
-    private static readonly TypeRegistryProvider _registryProvider = new();
+    private static readonly TypeRegistryProvider _registryProvider;
 
     /// <summary>
     /// Gets the <see cref="System.Type"/> represented by this type info.
@@ -26,10 +26,22 @@ public sealed class TypeInfo
     /// </summary>
     public DerivedTypeCollection Derived { get; }
 
-    internal TypeInfo(Type type, TypeIdentifier id)
+    static TypeInfo()
+    {
+        if (RuntimeFeature.IsDynamicCodeSupported)
+        {
+            _registryProvider = new Collectible.TypeRegistryProvider();
+        }
+        else
+        {
+            _registryProvider = new Static.TypeRegistryProvider();
+        }
+    }
+
+    internal TypeInfo(Type type, int id)
     {
         Type = type;
-        ID = id.CompositeKey;
+        ID = id;
         Derived = new DerivedTypeCollection(ID);
     }
 
@@ -83,7 +95,7 @@ public sealed class TypeInfo
     {
         ArgumentNullException.ThrowIfNull(type);
 
-        TypeRegistry registry = _registryProvider.GetOrAdd(type.Assembly);
+        TypeRegistry registry = _registryProvider.GetOrAdd(type);
 
         if (registry.GetOrAdd(type, out TypeInfo? typeInfo))
         {
@@ -114,7 +126,7 @@ public sealed class TypeInfo
     /// <returns><see langword="true"/> if the <see cref="TypeInfo"/> was found; otherwise, <see langword="false"/>.</returns>
     public static bool TryGet([NotNullWhen(true)] Type? type, [NotNullWhen(true)] out TypeInfo? typeInfo)
     {
-        if (type is { } && _registryProvider.TryGet(type.Assembly, out TypeRegistry? registry))
+        if (type is { } && _registryProvider.TryGet(type, out TypeRegistry? registry))
         {
             return registry.TryGet(type, out typeInfo);
         }
@@ -125,7 +137,7 @@ public sealed class TypeInfo
 
     private void AddDerived(Type type)
     {
-        TypeRegistry registry = _registryProvider.GetOrAdd(type.Assembly);
+        TypeRegistry registry = _registryProvider.GetOrAdd(type);
         registry.GetOrAdd(type, out TypeInfo typeInfo);
         typeInfo.Derived.Add(ID);
     }
