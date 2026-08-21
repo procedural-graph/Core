@@ -153,7 +153,7 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
     public bool Add<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T>(T item) where T : class
     {
         ArgumentNullException.ThrowIfNull(item);
-        ITypeInfo typeInfo = GetTypeInfo<T>();
+        TypeInfo typeInfo = TypeInfo.Get<T>();
         return Add(item, typeInfo);
     }
 
@@ -169,12 +169,11 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
     /// <exception cref="ArgumentNullException">
     /// Thrown if either the <paramref name="item"/> or the <paramref name="type"/> is <see langword="null"/>.
     /// </exception>
-    [RequiresDynamicCode(RequiresDynamicCodeMessage)]
-    public bool Add(object item, Type type)
+    public bool Add(object item, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(type);
-        ITypeInfo typeInfo = GetTypeInfo(type);
+        TypeInfo typeInfo = TypeInfo.Get(type);
         return Add(item, typeInfo);
     }
 
@@ -184,7 +183,7 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
     public bool Remove<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T>(T item) where T : class
     {
         ArgumentNullException.ThrowIfNull(item);
-        ITypeInfo typeInfo = GetTypeInfo<T>();
+        TypeInfo typeInfo = TypeInfo.Get<T>();
         return Remove(item, typeInfo);
     }
 
@@ -203,7 +202,7 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(type);
-        return TryGetTypeInfo(type, out ITypeInfo? typeInfo) && Remove(item, typeInfo);
+        return TypeInfo.TryGet(type, out TypeInfo? typeInfo) && Remove(item, typeInfo);
     }
 
     /// <inheritdoc cref="IEnumerable{T}.GetEnumerator"/>
@@ -213,7 +212,7 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private protected virtual bool Add(object item, ITypeInfo typeInfo)
+    private protected virtual bool Add(object item, TypeInfo typeInfo)
     {
         GetBuilders(out ArrayBuilder<IntegerLookup> lookupBuilder, out ArrayBuilder<object> itemBuilder);
         MutationMonitor monitor = new(this);
@@ -225,7 +224,7 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
         scoped ref TLookupBuilder lookupBuilder,
         scoped ref TItemBuilder itemBuilder,
         object item,
-        ITypeInfo typeInfo)
+        TypeInfo typeInfo)
         where TLookupBuilder : struct, IArrayBuilder<IntegerLookup>, allows ref struct
         where TItemBuilder : struct, IArrayBuilder<object>, allows ref struct
     {
@@ -273,7 +272,7 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private protected virtual bool Remove(object item, ITypeInfo typeInfo)
+    private protected virtual bool Remove(object item, TypeInfo typeInfo)
     {
         GetBuilders(out ArrayBuilder<IntegerLookup> lookupBuilder, out ArrayBuilder<object> itemBuilder);
         MutationMonitor monitor = new(this);
@@ -285,7 +284,7 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
         scoped ref TLookupBuilder lookupBuilder, 
         scoped ref TItemBuilder itemBuilder, 
         object item, 
-        ITypeInfo typeInfo)
+        TypeInfo typeInfo)
         where TLookupBuilder : struct, IArrayBuilder<IntegerLookup>, allows ref struct
         where TItemBuilder : struct, IArrayBuilder<object>, allows ref struct
     {
@@ -294,8 +293,11 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
             return;
         }
 
-        ImmutableArray<int> derived = typeInfo.DerivedTypeIDs;
-        ref int firstID = ref GetArrayDataReference(derived);
+        DerivedTypeCollection.CopyContext ctx = typeInfo.Derived.GetCopyContext();
+        Span<int> derived = stackalloc int[ctx.Count];
+        ctx.CopyTo(derived);
+
+        ref int firstID = ref MemoryMarshal.GetReference(derived);
         ref int currentID = ref Unsafe.Add(ref firstID, derived.Length - 1);
 
         TypeCluster cluster;
@@ -447,14 +449,7 @@ public class TypeLookup : ReadOnlyTypeLookup, ICollection<KeyValuePair<Type, obj
         Unsafe.Add(ref dataRef, index) = item;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ref T GetArrayDataReference<T>(ImmutableArray<T> values)
-    {
-        T[] array = ImmutableCollectionsMarshal.AsArray(values)!;
-        return ref MemoryMarshal.GetArrayDataReference(array);
-    }
-
-    [RequiresDynamicCode(RequiresDynamicCodeMessage), SuppressMessage("AOT", "IL3051")]
+    [SuppressMessage("Trimming", "IL2072")]
     void ICollection<KeyValuePair<Type, object>>.Add(KeyValuePair<Type, object> item)
     {
         Add(item.Value, item.Key);

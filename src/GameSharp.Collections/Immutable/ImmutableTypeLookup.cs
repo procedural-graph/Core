@@ -78,7 +78,7 @@ public sealed class ImmutableTypeLookup : ReadOnlyTypeLookup
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private protected override bool Add(object item, ITypeInfo typeInfo)
+        private protected override bool Add(object item, TypeInfo typeInfo)
         {
             bool lockHeld = false;
             try
@@ -97,7 +97,7 @@ public sealed class ImmutableTypeLookup : ReadOnlyTypeLookup
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private protected override bool Remove(object item, ITypeInfo typeInfo)
+        private protected override bool Remove(object item, TypeInfo typeInfo)
         {
             bool lockHeld = false;
             try
@@ -208,7 +208,7 @@ public sealed class ImmutableTypeLookup : ReadOnlyTypeLookup
     {
         ArgumentNullException.ThrowIfNull(item);
 
-        ITypeInfo typeInfo = GetTypeInfo<T>();
+        TypeInfo typeInfo = TypeInfo.Get<T>();
         return Add(item, typeInfo);
     }
 
@@ -217,13 +217,12 @@ public sealed class ImmutableTypeLookup : ReadOnlyTypeLookup
     /// already present.
     /// </returns>
     /// <inheritdoc cref="TypeLookup.Add(object, Type)"/>
-    [RequiresDynamicCode(RequiresDynamicCodeMessage)]
-    public ImmutableTypeLookup Add(object item, Type type)
+    public ImmutableTypeLookup Add(object item, [DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] Type type)
     {
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(type);
 
-        ITypeInfo typeInfo = GetTypeInfo(type);
+        TypeInfo typeInfo = TypeInfo.Get(type);
         return Add(item, typeInfo);
     }
 
@@ -234,7 +233,7 @@ public sealed class ImmutableTypeLookup : ReadOnlyTypeLookup
     {
         ArgumentNullException.ThrowIfNull(item);
 
-        ITypeInfo typeInfo = GetTypeInfo<T>();
+        TypeInfo typeInfo = TypeInfo.Get<T>();
         return Remove(item, typeInfo);
     }
 
@@ -248,7 +247,7 @@ public sealed class ImmutableTypeLookup : ReadOnlyTypeLookup
         ArgumentNullException.ThrowIfNull(item);
         ArgumentNullException.ThrowIfNull(type);
 
-        if (TryGetTypeInfo(type, out ITypeInfo? typeInfo))
+        if (TypeInfo.TryGet(type, out TypeInfo? typeInfo))
         {
             return Remove(item, typeInfo);
         }
@@ -337,7 +336,7 @@ public sealed class ImmutableTypeLookup : ReadOnlyTypeLookup
         return true;
     }
 
-    private ImmutableTypeLookup Add(object item, ITypeInfo typeInfo)
+    private ImmutableTypeLookup Add(object item, TypeInfo typeInfo)
     {
         ArrayBuilder<IntegerLookup> lookupBuilder = new(_lookups, _lookupCount);
         ArrayBuilder<object> itemBuilder = new(_items, _itemCount);
@@ -353,7 +352,7 @@ public sealed class ImmutableTypeLookup : ReadOnlyTypeLookup
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private ImmutableTypeLookup Remove(object item, ITypeInfo typeInfo)
+    private ImmutableTypeLookup Remove(object item, TypeInfo typeInfo)
     {
         ArrayBuilder<IntegerLookup> lookupBuilder = new(_lookups, _lookupCount);
         ArrayBuilder<object> itemBuilder = new(_items, _itemCount);

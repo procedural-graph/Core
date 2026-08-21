@@ -1,258 +1,196 @@
-﻿using System.Collections.Immutable;
-using System.Diagnostics.CodeAnalysis;
-using System.Reflection;
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
 namespace GameSharp.Collections;
 
-/// <summary>
-/// Provides a base registry for managing type information and inheritance relationships.
-/// </summary>
-/// <remarks>
-/// Does not support <see cref="System.Runtime.Loader.AssemblyLoadContext"/> unloading.
-/// </remarks>
-public abstract class TypeRegistry
+internal sealed class TypeRegistry(short id) : IDisposable
 {
-    private abstract class TypeInfo : ITypeInfo
+    public ref struct PurgeContext
     {
-        public abstract Type Type { get; }
+        private bool _disposed;
 
-        public abstract int ID { get; }
+        public TypeRegistry Registry { get; init; }
 
-        private ImmutableArray<int> _derivedTypeIDs;
-        public ImmutableArray<int> DerivedTypeIDs
+        public int Count { get; init; }
+
+        public readonly void Purge(ref Task task, short assemblyID)
         {
-            get => _derivedTypeIDs;
-            protected init => _derivedTypeIDs = value;
-        }
-
-        public bool AddRelationTo(int typeID)
-        {
-            return ImmutableInterlocked.Update(ref _derivedTypeIDs, InsertSorted, typeID);
-        }
-
-        private ImmutableArray<int> InsertSorted(ImmutableArray<int> ids, int id)
-        {
-            if (TryGetIndexOf(ids.AsSpan(), id, out int index))
+            OrderedDictionary<Type, TypeInfo>.ValueCollection.Enumerator enumerator = Registry._registrations.Values.GetEnumerator();
+            for (; enumerator.MoveNext(); task = ref Unsafe.Add(ref task, 1))
             {
-                return ids;
+                DerivedTypeCollection derived = enumerator.Current.Derived;
+                task = Task.Run(() => derived.RemoveAll(assemblyID));
+            }
+        }
+
+        public void Dispose()
+        {
+            if (!_disposed)
+            {
+                Registry._syncRoot.ExitReadLock();
+                Registry.DecrementActiveOperations();
             }
 
-            return ids.Insert(index, id);
+            _disposed = true;
         }
     }
 
-    private sealed class DynamicTypeInfo : TypeInfo
+    public short AssemblyID { get; } = id;
+
+    private readonly ReaderWriterLockSlim _syncRoot = new(LockRecursionPolicy.NoRecursion);
+    private readonly ManualResetEventSlim _drained = RuntimeFeature.IsDynamicCodeSupported ? new(initialState: true) : null!;
+    private int _state;
+    private bool IsDisposed
     {
-        public override Type Type { get; }
-
-        public override int ID { get; }
-
-        public DynamicTypeInfo(Type type, int id, int inheritorID)
-        {
-            Type = type;
-            ID = id;
-            int[] ids = [id, inheritorID];
-            ids.Sort();
-            DerivedTypeIDs = ImmutableCollectionsMarshal.AsImmutableArray(ids);
-        }
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => RuntimeFeature.IsDynamicCodeSupported && !TryIncrementActiveOperations();
     }
+    private readonly OrderedDictionary<Type, TypeInfo> _registrations = [];
 
-    private sealed class StaticTypeInfo<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T> : TypeInfo
+    public TypeInfo Get(int id)
     {
-        public static TypeInfo Default { get; }
-
-        public override Type Type => typeof(T);
-
-        public override int ID { get; }
-
-        static StaticTypeInfo()
-        {
-            _syncRoot.EnterUpgradeableReadLock();
-            
-            try
-            {
-                if (!_registrations.TryGetValue(typeof(T), out TypeInfo? typeInfo))
-                {
-                    _syncRoot.EnterWriteLock();
-
-                    try
-                    {
-                        typeInfo = new StaticTypeInfo<T>(_registrations.Count);
-                        _registrations.Add(typeof(T), typeInfo);
-                    }
-                    finally
-                    {
-                        _syncRoot.ExitWriteLock();
-                    }
-                }
-
-                for (Type? type = typeof(T).BaseType; type is { }; type = type.BaseType)
-                {
-                    InheritFrom(type, typeInfo.ID);
-                }
-
-                foreach (Type type in typeof(T).GetInterfaces())
-                {
-                    InheritFrom(type, typeInfo.ID);
-                }
-
-                // If type 'T' was already registered implicitly because 
-                // a derived type called InheritFrom(typeof(T)), 'typeInfo' will actually be 
-                // a DynamicTypeInfo instance, NOT a StaticTypeInfo instance. 
-                // This is intentional. By assigning that existing DynamicTypeInfo to Default, 
-                // we guarantee reference equality for ITypeInfo instances across the registry 
-                // and prevent static initialization deadlocks.
-
-                Default = typeInfo;
-            }
-            finally
-            {
-                _syncRoot.ExitUpgradeableReadLock();
-            }
-        }
-
-        private StaticTypeInfo(int id)
-        {
-            ID = id;
-            DerivedTypeIDs = [id];
-        }
-
-        private static void InheritFrom(Type type, int id)
-        {
-            if (_registrations.TryGetValue(type, out TypeInfo? typeInfo))
-            {
-                typeInfo.AddRelationTo(id);
-                return;
-            }
-
-            _syncRoot.EnterWriteLock();
-
-            try
-            {
-                typeInfo = new DynamicTypeInfo(type, _registrations.Count, id);
-                _registrations.Add(type, typeInfo);
-            }
-            finally
-            {
-                _syncRoot.ExitWriteLock();
-            }
-        }
-    }
-
-    private static readonly OrderedDictionary<Type, TypeInfo> _registrations = [];
-    private static readonly ReaderWriterLockSlim _syncRoot = new(LockRecursionPolicy.NoRecursion);
-
-    /// <summary>
-    /// Retrieves the type information associated with the specified unique ID.
-    /// </summary>
-    /// <param name="id">The unique ID of the type.</param>
-    /// <returns>The type information associated with <paramref name="id"/>.</returns>
-    /// <exception cref="ArgumentException">Thrown if no type registration was found for the specified ID.</exception>
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    protected static ITypeInfo GetTypeInfo(int id)
-    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
         _syncRoot.EnterReadLock();
 
         try
         {
             return _registrations.GetAt(id).Value;
         }
-        catch (ArgumentOutOfRangeException ex)
+        finally
         {
-            throw new ArgumentException("A type registration with the specified ID was not found.", ex);
+            _syncRoot.ExitReadLock();
+            DecrementActiveOperations();
+        }
+    }
+
+    public bool TryGet(Type type, [MaybeNullWhen(false)] out TypeInfo typeInfo)
+    {
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        _syncRoot.EnterReadLock();
+
+        try
+        {
+            return _registrations.TryGetValue(type, out typeInfo);
         }
         finally
         {
             _syncRoot.ExitReadLock();
+            DecrementActiveOperations();
         }
     }
 
-    /// <summary>
-    /// Retrieves the type information for the specified type <typeparamref name="T"/>.
-    /// </summary>
-    /// <typeparam name="T">The type to retrieve information for.</typeparam>
-    /// <returns>The type information for <typeparamref name="T"/>.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    protected static ITypeInfo GetTypeInfo<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.Interfaces)] T>()
+    public bool GetOrAdd(Type type, [NotNull] out TypeInfo? typeInfo)
     {
-        return StaticTypeInfo<T>.Default;
-    }
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        _syncRoot.EnterUpgradeableReadLock();
 
-    /// <summary>
-    /// Attempts to retrieve the type information for a specified <see cref="Type"/>.
-    /// </summary>
-    /// <remarks>
-    /// If just-in-time (JIT) compilation is available, a type registration will be automatically created for 
-    /// <paramref name="type"/> if one does not already exist.
-    /// </remarks>
-    /// <param name="type">The <see cref="Type"/> to look up.</param>
-    /// <param name="typeInfo">
-    /// When this method returns, contains the type information for <paramref name="type"/> or <see langword="null"/> if
-    /// no type registration was created.
-    /// </param>
-    /// <returns>
-    /// <see langword="true"/> if a type registration was created or found for <paramref name="type"/>; 
-    /// otherwise <see langword="false"/>.
-    /// </returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    protected static bool TryGetTypeInfo(Type type, [NotNullWhen(true)] out ITypeInfo? typeInfo)
-    {
-        if (TryGetExistingTypeInfo(type, out typeInfo))
+        try
         {
-            return true;
+            if (_registrations.TryGetValue(type, out typeInfo))
+            {
+                return true;
+            }
+
+            _syncRoot.EnterWriteLock();
+
+            try
+            {
+                if (_registrations.TryGetValue(type, out typeInfo))
+                {
+                    return true;
+                }
+
+                TypeIdentifier id = new()
+                {
+                    AssemblyID = AssemblyID,
+                    TypeID = checked((ushort)_registrations.Count)
+                };
+
+                typeInfo = new TypeInfo(type, id);
+                _registrations.Add(type, typeInfo);
+            }
+            catch (OverflowException ex)
+            {
+                throw new InvalidOperationException("The maximum number of TypeInfo instances has been reached.", ex);
+            }
+            finally
+            {
+                _syncRoot.ExitWriteLock();
+            }
         }
-
-        if (RuntimeFeature.IsDynamicCodeSupported)
+        finally
         {
-            typeInfo = GetTypeInfo(type);
-            return true;
+            _syncRoot.ExitUpgradeableReadLock();
+            DecrementActiveOperations();
         }
 
         return false;
     }
 
-    /// <summary>
-    /// Retrieves the type information for the specified <see cref="Type"/>.
-    /// </summary>
-    /// <param name="type">The <see cref="Type"/> to retrieve information for.</param>
-    /// <returns>The <see cref="ITypeInfo"/> associated with the provided <paramref name="type"/>.</returns>
-    [RequiresDynamicCode("Calls System.Type.MakeGenericType(params Type[])"), SuppressMessage("Trimming", "IL2071"), MethodImpl(MethodImplOptions.AggressiveInlining)]
-    protected static ITypeInfo GetTypeInfo(Type type)
+    public PurgeContext GetPurgeContext()
     {
-        Type infoType = typeof(StaticTypeInfo<>).MakeGenericType(type)!;
-        PropertyInfo property = infoType.GetProperty(nameof(StaticTypeInfo<>.Default), BindingFlags.Public | BindingFlags.Static)!;
-        return Unsafe.As<ITypeInfo>(property.GetValue(null)!);
+        ObjectDisposedException.ThrowIf(IsDisposed, this);
+        _syncRoot.EnterReadLock();
+        return new PurgeContext()
+        {
+            Count = _registrations.Count,
+            Registry = this
+        };
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private static bool TryGetExistingTypeInfo(Type type, [NotNullWhen(true)] out ITypeInfo? typeInfo)
+    public void Dispose()
     {
-        _syncRoot.EnterReadLock();
-
-        try
+        if (RuntimeFeature.IsDynamicCodeSupported)
         {
-            if (_registrations.TryGetValue(type, out TypeInfo? typedTypeInfo))
+            int currState = Interlocked.Exchange(ref _state, -1);
+
+            if (currState == -1)
             {
-                typeInfo = typedTypeInfo;
-                return true;
+                return;
             }
 
-            typeInfo = null;
-            return false;
+            if (currState > 0)
+            {
+                _drained.Wait();
+            }
+
+            _drained.Dispose();
+
+            _syncRoot.Dispose();
         }
-        finally
+        else
         {
-            _syncRoot.ExitReadLock();
+            throw new NotSupportedException();
         }
+    }
+
+    private bool TryIncrementActiveOperations()
+    {
+        int currState = Volatile.Read(ref _state), prevState;
+
+        do
+        {
+            if (currState == -1)
+            {
+                return false;
+            }
+
+            int nextState = currState + 1;
+            (currState, prevState) = (Interlocked.CompareExchange(ref _state, nextState, currState), currState);
+        }
+        while (prevState != currState);
+
+        _drained.Reset();
+
+        return true;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private protected static bool TryGetIndexOf(ReadOnlySpan<int> ids, int id, out int index)
+    private void DecrementActiveOperations()
     {
-        ids.HybridSearch(id, out int byteOffset, out bool exists);
-        index = byteOffset >> 2;
-        return exists;
+        if (RuntimeFeature.IsDynamicCodeSupported && Interlocked.Decrement(ref _state) == 0)
+        {
+            _drained.Set();
+        }
     }
 }
